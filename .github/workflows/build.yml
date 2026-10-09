@@ -1,0 +1,80 @@
+name: Build BroadcastMaster
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Metering and DSP tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Metering tests
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -ISource/Meters Tests/MeterTests.cpp -o meter_tests
+          ./meter_tests
+      - name: DSP module tests (with address and undefined-behaviour sanitizers)
+        run: |
+          g++ -std=c++17 -O1 -g -fsanitize=address,undefined -Wall -Wextra -ISource Tests/DspTests.cpp -o dsp_tests
+          ./dsp_tests
+      - name: Processing chain tests (with sanitizers)
+        run: |
+          g++ -std=c++17 -O1 -g -fsanitize=address,undefined -Wall -Wextra -ISource Tests/ChainTests.cpp -o chain_tests
+          ./chain_tests
+
+  build:
+    name: VST3 (${{ matrix.name }})
+    needs: tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -B build
+
+      - name: Configure (macOS, universal arm64 + x86_64)
+        if: runner.os == 'macOS'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --target BroadcastMaster_VST3 --parallel
+
+      - name: Locate the plugin
+        id: locate
+        shell: bash
+        run: |
+          VST3=$(find build -maxdepth 6 -name "BroadcastMaster.vst3" | head -n 1)
+          echo "Found: $VST3"
+          echo "path=$VST3" >> "$GITHUB_OUTPUT"
+
+      - name: Ad-hoc sign (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - "${{ steps.locate.outputs.path }}"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "${{ steps.locate.outputs.path }}" -DestinationPath BroadcastMaster-Windows-VST3.zip
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent "${{ steps.locate.outputs.path }}" BroadcastMaster-macOS-VST3.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BroadcastMaster-${{ matrix.name }}-VST3
+          path: BroadcastMaster-*-VST3.zip
