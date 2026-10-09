@@ -7,6 +7,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   tests:
     name: Metering and DSP tests
@@ -78,3 +81,31 @@ jobs:
         with:
           name: BroadcastMaster-${{ matrix.name }}-VST3
           path: BroadcastMaster-*-VST3.zip
+
+  release:
+    name: Publish downloads
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish as a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l dist
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            gh release create "$TAG" dist/*.zip --title "BroadcastMaster $TAG" --notes "Windows x64 and macOS universal VST3 builds."
+          else
+            # rolling release that always holds the newest build from main
+            gh release delete latest --cleanup-tag --yes 2>/dev/null || true
+            gh release create latest dist/*.zip --target "$GITHUB_SHA" --prerelease \
+              --title "Latest build" \
+              --notes "Newest build from main (${GITHUB_SHA::7}). Windows x64 and macOS universal (arm64 + x86_64) VST3, zipped."
+          fi
