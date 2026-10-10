@@ -87,6 +87,8 @@ public:
         }
     }
 
+    bool isSwitch() const noexcept { return kind == bm::params::Kind::Bool; }
+
     static int preferredWidth (const bm::params::ParamSpec& s, Style st)
     {
         if (s.kind == bm::params::Kind::Bool) return 130;

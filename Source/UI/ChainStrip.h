@@ -77,13 +77,10 @@ public:
         const auto rf = getLocalBounds().toFloat().reduced (2.0f, 0.0f);
         const bool on = isOn();
 
-        g.setColour (p.panelRaised);
+        g.setColour (p.panelRaised.withAlpha (on ? 1.0f : 0.6f));
         g.fillRoundedRectangle (rf, 8.0f);
-        if (selected)
-        {
-            g.setColour (p.accent);
-            g.drawRoundedRectangle (rf.reduced (1.0f), 8.0f, 2.0f);
-        }
+        g.setColour (selected ? p.accent : p.border);
+        g.drawRoundedRectangle (rf.reduced (0.5f), 8.0f, selected ? 1.5f : 1.0f);
 
         const float a = on ? 1.0f : 0.45f;
         g.setColour (p.textDim.withAlpha (a));
@@ -100,7 +97,7 @@ public:
 
         // mini meter: RMS fill with a peak tick, -60 to 0 dBFS
         auto m = juce::Rectangle<float> (rf.getRight() - 16.0f, rf.getY() + 48.0f, 8.0f, rf.getHeight() - 48.0f - 26.0f);
-        g.setColour (p.bg.withAlpha (p.dark ? 0.7f : 0.5f));
+        g.setColour (p.border.withAlpha (0.6f));
         g.fillRoundedRectangle (m, 2.0f);
         auto yFor = [&] (float db) { return m.getBottom() - m.getHeight() * (juce::jlimit (-60.0f, 0.0f, db) + 60.0f) / 60.0f; };
         const float yr = yFor (rmsShown);

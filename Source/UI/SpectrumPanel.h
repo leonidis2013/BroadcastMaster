@@ -26,6 +26,78 @@ public:
         eqParams = params;
     }
 
+    // Shows the multiband compressor graph (band regions, thresholds, levels, reduction) in the analyser window.
+    void setMbcOverlay (bool show)
+    {
+        if (show != showMbc) { showMbc = show; dragKind = 0; setMouseCursor (juce::MouseCursor::NormalCursor); repaint(); }
+    }
+
+    void mouseMove (const juce::MouseEvent& e) override
+    {
+        if (! showMbc) return;
+        const auto h = mbcHit (e.position);
+        setMouseCursor (h.kind == 1 ? juce::MouseCursor::LeftRightResizeCursor
+                      : h.kind == 2 ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
+        if (h.kind != hover.kind || h.idx != hover.idx) { hover = h; repaint(); }
+    }
+
+    void mouseExit (const juce::MouseEvent&) override { hover = {}; }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (! showMbc || ! plotRect().contains (e.position)) return;
+        const auto h = mbcHit (e.position);
+        if (h.band >= 0) proc.apvts.state.setProperty ("mbcBand", h.band, nullptr);
+        dragKind = h.kind;
+        dragIdx = h.idx;
+        dragParam = nullptr;
+        if (h.kind == 1) dragParam = proc.apvts.getParameter ("mb_x" + juce::String (h.idx + 1));
+        else if (h.kind == 2) dragParam = proc.apvts.getParameter (bm::params::mbId (h.idx, "thr"));
+        if (dragParam != nullptr) dragParam->beginChangeGesture();
+    }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        if (! showMbc || dragParam == nullptr) return;
+        const auto r = plotRect();
+        if (dragKind == 1)
+        {
+            const auto* xs = bm::params::findSpec ("mb_x" + std::to_string (dragIdx + 1));
+            double f = 20.0 * std::pow (1000.0, juce::jlimit (0.0, 1.0, (double) ((e.position.x - r.getX()) / r.getWidth())));
+            double lo = xs->min, hi = xs->max;
+            if (dragIdx > 0) lo = juce::jmax (lo, (double) param ("mb_x" + juce::String (dragIdx)) * 1.3);
+            if (dragIdx < 2) hi = juce::jmin (hi, (double) param ("mb_x" + juce::String (dragIdx + 2)) / 1.3);
+            if (lo < hi) dragParam->setValueNotifyingHost (dragParam->convertTo0to1 ((float) juce::jlimit (lo, hi, f)));
+        }
+        else if (dragKind == 2)
+        {
+            const float db = -kMbcRange * juce::jlimit (0.0f, 1.0f, (e.position.y - r.getY()) / r.getHeight());
+            dragParam->setValueNotifyingHost (dragParam->convertTo0to1 (db));
+        }
+    }
+
+    void mouseUp (const juce::MouseEvent&) override
+    {
+        if (dragParam != nullptr) dragParam->endChangeGesture();
+        dragParam = nullptr; dragKind = 0;
+    }
+
+    void mouseDoubleClick (const juce::MouseEvent& e) override
+    {
+        if (! showMbc) return;
+        const auto h = mbcHit (e.position);
+        const juce::String id = h.kind == 1 ? juce::String ("mb_x") + juce::String (h.idx + 1)
+                              : h.kind == 2 ? juce::String (bm::params::mbId (h.idx, "thr")) : juce::String();
+        if (id.isEmpty()) return;
+        if (auto* prm = proc.apvts.getParameter (id))
+            if (const auto* sp = bm::params::findSpec (id.toStdString()))
+            {
+                prm->beginChangeGesture();
+                prm->setValueNotifyingHost (prm->convertTo0to1 (sp->def));
+                prm->endChangeGesture();
+            }
+    }
+
     void tick (const UiState& st)
     {
         const double fs = proc.getCurrentSampleRate();
@@ -144,6 +216,8 @@ private:
         g.setColour (p.bg.withAlpha (p.dark ? 0.55f : 0.5f));
         g.fillRoundedRectangle (r, 4.0f);
 
+        if (showMbc) { paintMbc (g, full, r); return; }
+
         g.setFont (font (10.0f));
         for (float db = kBottom; db <= kTop + 0.1f; db += 10.0f)
         {
@@ -202,6 +276,159 @@ private:
         }
         if (showEq) paintEqCurve (g, r);
         g.restoreState();
+    }
+
+    // ---- multiband compressor graph -------------------------------------------------------------------
+    static constexpr float kMbcRange = 60.0f;   // vertical scale: 0 dB at the top, -60 dB at the bottom
+
+    juce::Rectangle<float> plotRect() const { return rtaArea.toFloat().withTrimmedLeft (34.0f).withTrimmedBottom (16.0f); }
+    float param (const juce::String& id) const { return proc.apvts.getRawParameterValue (id)->load(); }
+    float yForMbc (float db, juce::Rectangle<float> r) const { return r.getY() + r.getHeight() * (-juce::jlimit (-kMbcRange, 0.0f, db) / kMbcRange); }
+    int selectedBand() const { return juce::jlimit (0, 3, (int) proc.apvts.state.getProperty ("mbcBand", 0)); }
+
+    struct MbcHit { int kind = 0; int idx = -1; int band = -1; };   // kind: 0 none, 1 crossover, 2 threshold
+
+    MbcHit mbcHit (juce::Point<float> pt) const
+    {
+        MbcHit h;
+        const auto r = plotRect();
+        if (! r.contains (pt)) return h;
+        const double xo[3] { param ("mb_x1"), param ("mb_x2"), param ("mb_x3") };
+        const double edges[5] { 20.0, xo[0], xo[1], xo[2], 20000.0 };
+        for (int b = 0; b < 4; ++b)
+            if (pt.x >= xForFreq (edges[b], r) && pt.x <= xForFreq (edges[b + 1], r)) h.band = b;
+        for (int i = 0; i < 3; ++i)
+            if (std::fabs (pt.x - xForFreq (xo[i], r)) < 7.0f) { h.kind = 1; h.idx = i; return h; }
+        if (h.band >= 0 && std::fabs (pt.y - yForMbc (param (bm::params::mbId (h.band, "thr")), r)) < 9.0f)
+        { h.kind = 2; h.idx = h.band; }
+        return h;
+    }
+
+    static juce::String hzText (double f) { return f >= 1000.0 ? juce::String (f / 1000.0, f >= 10000.0 ? 1 : 2) + " kHz" : juce::String ((int) std::lround (f)) + " Hz"; }
+
+    void paintMbc (juce::Graphics& g, juce::Rectangle<float> full, juce::Rectangle<float> r)
+    {
+        const auto& p = pal();
+        g.setFont (font (10.0f));
+        for (float db = 0.0f; db >= -kMbcRange - 0.1f; db -= 10.0f)
+        {
+            const float y = yForMbc (db, r);
+            g.setColour (p.grid);
+            g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
+            g.setColour (p.textDim);
+            g.drawText (juce::String ((int) db), juce::Rectangle<float> (full.getX(), y - 6.0f, 30.0f, 12.0f), juce::Justification::centredRight);
+        }
+        const double freqs[] = { 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
+        for (double f : freqs)
+        {
+            const float x = xForFreq (f, r);
+            g.setColour (p.grid);
+            g.drawVerticalLine ((int) x, r.getY(), r.getBottom());
+            g.setColour (p.textDim);
+            const juce::String t = f >= 1000 ? juce::String (f / 1000.0, f == 1000 || f == 2000 || f == 5000 || f >= 10000 ? 0 : 1) + "k" : juce::String ((int) f);
+            g.drawText (t, juce::Rectangle<float> (x - 20.0f, r.getBottom() + 2.0f, 40.0f, 12.0f), juce::Justification::centred);
+        }
+
+        const bool stageOn = param ("en_mbc") > 0.5f;
+        const int sel = selectedBand();
+        const double xo[3] { param ("mb_x1"), param ("mb_x2"), param ("mb_x3") };
+        const double edges[5] { 20.0, xo[0], xo[1], xo[2], 20000.0 };
+        static const char* names[] { "LOW", "LOW-MID", "HIGH-MID", "HIGH" };
+
+        g.saveState();
+        g.reduceClipRegion (r.toNearestInt());
+
+        for (int b = 0; b < 4; ++b)
+        {
+            const float x0 = xForFreq (edges[b], r), x1 = xForFreq (edges[b + 1], r);
+            const auto region = juce::Rectangle<float> (x0, r.getY(), x1 - x0, r.getHeight());
+            const auto col = p.bandCol[b];
+            const bool live = stageOn && param (bm::params::mbId (b, "on")) > 0.5f;
+            const float a = live ? 1.0f : 0.4f;
+            const float thr = param (bm::params::mbId (b, "thr"));
+            const float yT = yForMbc (thr, r);
+
+            g.setColour (col.withAlpha ((b == sel ? 0.13f : 0.06f) * a));
+            g.fillRect (region);
+            g.setColour (col.withAlpha (0.05f * a));
+            g.fillRect (region.withBottom (yT));          // the zone where this band is compressed
+
+            // detector level
+            const float lvl = live ? proc.mbcBandLevel (b) : -120.0f;
+            const float bw = juce::jmin (26.0f, region.getWidth() * 0.18f);
+            const float bx = region.getX() + region.getWidth() * 0.27f - bw * 0.5f;
+            if (lvl > -kMbcRange)
+            {
+                const float yL = yForMbc (lvl, r);
+                g.setGradientFill (juce::ColourGradient (col.withAlpha (0.65f), 0.0f, yL, col.withAlpha (0.12f), 0.0f, r.getBottom(), false));
+                g.fillRect (juce::Rectangle<float> (bx, yL, bw, r.getBottom() - yL));
+                g.setColour (col);
+                g.fillRect (juce::Rectangle<float> (bx, yL - 1.0f, bw, 2.0f));
+            }
+
+            // gain reduction hangs from the top
+            const float gr = live ? proc.mbcBandGr (b) : 0.0f;
+            const float gx = region.getX() + region.getWidth() * 0.73f - 6.0f;
+            g.setColour (p.border.withAlpha (0.7f));
+            g.fillRoundedRectangle (gx, r.getY() + 34.0f, 12.0f, r.getHeight() * 0.55f, 3.0f);
+            const float grH = r.getHeight() * 0.55f * juce::jlimit (0.0f, 1.0f, gr / 18.0f);
+            g.setColour (p.reduction);
+            g.fillRoundedRectangle (gx, r.getY() + 34.0f, 12.0f, juce::jmax (0.0f, grH), 3.0f);
+            g.setColour (p.textDim);
+            g.setFont (monoFont (10.0f));
+            g.drawText ((gr < 0.05f ? juce::String ("0.0") : juce::String (-gr, 1)) + " dB", juce::Rectangle<float> (gx - 24.0f, r.getY() + 36.0f + r.getHeight() * 0.55f, 60.0f, 12.0f), juce::Justification::centred);
+
+            // threshold line and handle
+            const bool hot = (hover.kind == 2 && hover.idx == b) || (dragKind == 2 && dragIdx == b);
+            g.setColour (col.withAlpha (a));
+            g.fillRect (juce::Rectangle<float> (region.getX() + 6.0f, yT - 1.0f, region.getWidth() - 12.0f, hot ? 3.0f : 2.0f));
+            const auto hc = juce::Point<float> (region.getCentreX(), yT);
+            g.fillEllipse (juce::Rectangle<float> (hot ? 16.0f : 13.0f, hot ? 16.0f : 13.0f).withCentre (hc));
+            g.setColour (p.bg);
+            g.drawEllipse (juce::Rectangle<float> (hot ? 16.0f : 13.0f, hot ? 16.0f : 13.0f).withCentre (hc), 1.5f);
+            g.setColour (p.text.withAlpha (a));
+            g.setFont (monoFont (10.5f, true));
+            const float ly = yT < r.getY() + 54.0f ? yT + 8.0f : yT - 20.0f;
+            g.drawText (juce::String (thr, 1) + " dB   " + juce::String (param (bm::params::mbId (b, "ratio")), 1) + ":1",
+                        juce::Rectangle<float> (region.getX() + 8.0f, ly, region.getWidth() - 16.0f, 14.0f), juce::Justification::centredLeft);
+
+            // title
+            g.setColour (col.withAlpha (a));
+            g.setFont (font (11.0f, true));
+            g.drawText (juce::String (b + 1) + "  " + names[b], juce::Rectangle<float> (region.getX() + 8.0f, r.getY() + 5.0f, region.getWidth() - 16.0f, 14.0f), juce::Justification::centredLeft);
+            g.setColour (p.textDim);
+            g.setFont (font (10.0f));
+            const juce::String range = b == 0 ? "below " + hzText (xo[0]) : (b == 3 ? "above " + hzText (xo[2]) : hzText (xo[b - 1]) + " - " + hzText (xo[b]));
+            g.drawText (range, juce::Rectangle<float> (region.getX() + 8.0f, r.getY() + 19.0f, region.getWidth() - 16.0f, 12.0f), juce::Justification::centredLeft);
+
+            if (b == sel)
+            {
+                g.setColour (col);
+                g.fillRect (juce::Rectangle<float> (region.getX(), r.getBottom() - 3.0f, region.getWidth(), 3.0f));
+            }
+        }
+
+        // crossover lines and handles
+        for (int i = 0; i < 3; ++i)
+        {
+            const float x = xForFreq (xo[i], r);
+            const bool hot = (hover.kind == 1 && hover.idx == i) || (dragKind == 1 && dragIdx == i);
+            g.setColour (p.text.withAlpha (hot ? 0.9f : 0.45f));
+            g.fillRect (juce::Rectangle<float> (x - (hot ? 1.0f : 0.5f), r.getY(), hot ? 2.0f : 1.0f, r.getHeight()));
+            g.setColour (p.panelRaised);
+            const auto pill = juce::Rectangle<float> (10.0f, 30.0f).withCentre ({ x, r.getCentreY() });
+            g.fillRoundedRectangle (pill, 4.0f);
+            g.setColour (p.text.withAlpha (hot ? 0.9f : 0.55f));
+            g.drawRoundedRectangle (pill, 4.0f, 1.0f);
+            g.setFont (monoFont (10.0f, true));
+            g.drawText (hzText (xo[i]), juce::Rectangle<float> (x - 36.0f, r.getBottom() - 34.0f, 72.0f, 12.0f), juce::Justification::centred);
+        }
+        g.restoreState();
+
+        g.setColour (p.textDim);
+        g.setFont (font (10.5f));
+        g.drawText ("MULTIBAND   bars: band level   pink: reduction   line: threshold",
+                    getLocalBounds().toFloat().reduced (12.0f).withHeight (18.0f).withTrimmedRight (80.0f), juce::Justification::centredRight);
     }
 
     void paintEqCurve (juce::Graphics& g, juce::Rectangle<float> r) const
@@ -310,7 +537,10 @@ private:
     float targetSlope = 0.0f, targetOffset = -60.0f;
     int bpo = 6, lastBpo = -1;
     double lastFs = 0.0;
-    bool showOther = false, showingOutput = true, showEq = false;
+    bool showOther = false, showingOutput = true, showEq = false, showMbc = false;
+    MbcHit hover;
+    int dragKind = 0, dragIdx = -1;
+    juce::RangedAudioParameter* dragParam = nullptr;
     bm::dsp::EqParams eqParams;
     std::vector<float> raw, smoothShown, smoothOther;
     juce::Rectangle<int> rtaArea, specArea;

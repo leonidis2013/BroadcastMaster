@@ -6,26 +6,33 @@ namespace bm::ui
 struct Palette
 {
     bool dark;
-    juce::Colour bg, panel, panelRaised, border, grid, text, textDim, accent, good, warn, bad, inputCol, outputCol;
+    juce::Colour bg, panel, panelRaised, border, grid, text, textDim, accent, good, warn, bad, inputCol, outputCol, onAccent;
+    juce::Colour bandCol[4];   // multiband compressor bands
+    juce::Colour reduction;    // gain reduction
 };
 
+// Same surfaces, accents and light/dark pairing as the LiveVoice dynamic EQ: a softer, lighter look.
 inline const Palette& darkPalette()
 {
     static const Palette p { true,
-        juce::Colour (0xff0e1115), juce::Colour (0xff161a20), juce::Colour (0xff1e242c), juce::Colour (0xff2a323d),
-        juce::Colour (0xff262d37), juce::Colour (0xffe9edf2), juce::Colour (0xff8794a5), juce::Colour (0xffe5484d),
-        juce::Colour (0xff3ecf8e), juce::Colour (0xfff5a524), juce::Colour (0xffe5484d),
-        juce::Colour (0xff6aa8ff), juce::Colour (0xffff8a5c) };
+        juce::Colour (0xff0d1015), juce::Colour (0xff151a21), juce::Colour (0xff1b2129), juce::Colour (0xff252c36),
+        juce::Colour (0xff1e252e), juce::Colour (0xffd8dee6), juce::Colour (0xff7c8794), juce::Colour (0xff2ec4b6),
+        juce::Colour (0xff3ecf6e), juce::Colour (0xfff2c94c), juce::Colour (0xffef4c4c),
+        juce::Colour (0xff4c8dff), juce::Colour (0xffff8a3d), juce::Colour (0xff0d1015),
+        { juce::Colour (0xff2ec4b6), juce::Colour (0xff4c8dff), juce::Colour (0xffa78bfa), juce::Colour (0xfff6c453) },
+        juce::Colour (0xfff472b6) };
     return p;
 }
 
 inline const Palette& lightPalette()
 {
     static const Palette p { false,
-        juce::Colour (0xffeef1f5), juce::Colour (0xffffffff), juce::Colour (0xfff4f6f9), juce::Colour (0xffd3d9e1),
-        juce::Colour (0xffe2e7ed), juce::Colour (0xff1a2029), juce::Colour (0xff5d6a7b), juce::Colour (0xffd13438),
-        juce::Colour (0xff1a9d62), juce::Colour (0xffd98400), juce::Colour (0xffd13438),
-        juce::Colour (0xff2a6fdb), juce::Colour (0xffe0602d) };
+        juce::Colour (0xffe9edf2), juce::Colour (0xfffbfcfd), juce::Colour (0xfff0f3f6), juce::Colour (0xffd3dae3),
+        juce::Colour (0xffe3e8ee), juce::Colour (0xff18202b), juce::Colour (0xff586474), juce::Colour (0xff0f9488),
+        juce::Colour (0xff23a056), juce::Colour (0xffcf9a10), juce::Colour (0xffd63232),
+        juce::Colour (0xff2563d6), juce::Colour (0xffe0661a), juce::Colour (0xffffffff),
+        { juce::Colour (0xff0f9488), juce::Colour (0xff2563d6), juce::Colour (0xff7553e0), juce::Colour (0xffc98a0a) },
+        juce::Colour (0xffd2478f) };
     return p;
 }
 
@@ -48,9 +55,9 @@ inline juce::Font monoFont (float height, bool bold = false)
 inline void drawPanel (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title)
 {
     g.setColour (pal().panel);
-    g.fillRoundedRectangle (r, 8.0f);
+    g.fillRoundedRectangle (r, 10.0f);
     g.setColour (pal().border);
-    g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.0f);
+    g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, 1.0f);
     if (title.isNotEmpty())
     {
         g.setColour (pal().textDim);

@@ -163,6 +163,7 @@ void BroadcastMasterEditor::timerCallback()
     topBar.tick();
     monBar.tick();
     spectrum.setEqOverlay (modules.getSelected() == bm::dsp::sEq, processor.readEq());
+    spectrum.setMbcOverlay (modules.getSelected() == bm::dsp::sMbc);
 }
 
 void BroadcastMasterEditor::paint (juce::Graphics& g)

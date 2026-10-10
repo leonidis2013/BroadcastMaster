@@ -28,11 +28,11 @@ public:
         setColour (juce::PopupMenu::backgroundColourId, p.panelRaised);
         setColour (juce::PopupMenu::textColourId, p.text);
         setColour (juce::PopupMenu::highlightedBackgroundColourId, p.accent);
-        setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+        setColour (juce::PopupMenu::highlightedTextColourId, p.onAccent);
         setColour (juce::TextButton::buttonColourId, p.panelRaised);
         setColour (juce::TextButton::buttonOnColourId, p.accent);
         setColour (juce::TextButton::textColourOffId, p.text);
-        setColour (juce::TextButton::textColourOnId, juce::Colours::white);
+        setColour (juce::TextButton::textColourOnId, p.onAccent);
         setColour (juce::ToggleButton::textColourId, p.text);
         setColour (juce::TooltipWindow::backgroundColourId, p.panelRaised);
         setColour (juce::TooltipWindow::textColourId, p.text);
@@ -69,13 +69,13 @@ public:
     {
         const auto r = b.getLocalBounds().toFloat().reduced (0.5f);
         const bool on = b.getToggleState();
-        auto fill = on ? pal().accent : pal().panelRaised;
+        auto fill = on ? b.findColour (juce::TextButton::buttonOnColourId) : pal().panelRaised;
         if (hover && ! on) fill = fill.brighter (pal().dark ? 0.12f : -0.04f);
         if (down) fill = fill.darker (0.15f);
         g.setColour (fill);
-        g.fillRoundedRectangle (r, 6.0f);
-        g.setColour (on ? pal().accent : pal().border);
-        g.drawRoundedRectangle (r, 6.0f, 1.0f);
+        g.fillRoundedRectangle (r, 5.0f);
+        g.setColour (on ? fill.brighter (0.25f) : pal().border);
+        g.drawRoundedRectangle (r, 5.0f, 1.0f);
     }
 
     void drawComboBox (juce::Graphics& g, int w, int h, bool, int, int, int, int, juce::ComboBox& box) override
@@ -121,31 +121,35 @@ public:
         const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (4.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
-        const float arcR = radius - 2.0f;
+        const float track = juce::jmax (2.5f, radius * 0.14f);
+        const float arcR = radius - track;
         const float angle = startAngle + pos * (endAngle - startAngle);
         const bool enabled = s.isEnabled();
 
-        juce::Path track;
-        track.addCentredArc (centre.x, centre.y, arcR, arcR, 0.0f, startAngle, endAngle, true);
+        juce::Path bg;
+        bg.addCentredArc (centre.x, centre.y, arcR, arcR, 0.0f, startAngle, endAngle, true);
         g.setColour (pal().border);
-        g.strokePath (track, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.strokePath (bg, juce::PathStrokeType (track, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        // Draw the value arc from the zero point of the range, so cut-only and boost/cut knobs both read clearly.
+        // The value arc starts at the zero point of the range, so cut-only and boost/cut knobs both read clearly.
         const double lo = s.getMinimum(), hi = s.getMaximum();
-        const float zeroPos = (float) juce::jlimit (0.0, 1.0, (0.0 - lo) / (hi - lo));
+        const float zeroPos = (lo < 0.0 && hi > 0.0) ? (float) ((0.0 - lo) / (hi - lo)) : 0.0f;
         const float zeroAngle = startAngle + zeroPos * (endAngle - startAngle);
         juce::Path value;
         value.addCentredArc (centre.x, centre.y, arcR, arcR, 0.0f, juce::jmin (zeroAngle, angle), juce::jmax (zeroAngle, angle), true);
-        g.setColour (enabled ? s.findColour (juce::Slider::rotarySliderFillColourId) : pal().textDim.withAlpha (0.4f));
-        g.strokePath (value, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (enabled ? s.findColour (juce::Slider::rotarySliderFillColourId) : pal().textDim.withAlpha (0.35f));
+        g.strokePath (value, juce::PathStrokeType (track, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
+        const float knobR = radius - track * 2.2f;
         g.setColour (pal().panelRaised);
-        g.fillEllipse (bounds.withSizeKeepingCentre (arcR * 1.45f, arcR * 1.45f));
+        g.fillEllipse (centre.x - knobR, centre.y - knobR, knobR * 2.0f, knobR * 2.0f);
+        g.setColour (pal().border.brighter (pal().dark ? 0.2f : -0.05f));
+        g.drawEllipse (centre.x - knobR, centre.y - knobR, knobR * 2.0f, knobR * 2.0f, 1.0f);
 
-        juce::Path pointer;
-        pointer.addRoundedRectangle (-1.25f, -arcR * 0.72f, 2.5f, arcR * 0.42f, 1.0f);
+        const auto tip = centre.getPointOnCircumference (knobR * 0.78f, angle);
+        const auto base = centre.getPointOnCircumference (knobR * 0.25f, angle);
         g.setColour (enabled ? pal().text : pal().textDim.withAlpha (0.5f));
-        g.fillPath (pointer, juce::AffineTransform::rotation (angle).translated (centre.x, centre.y));
+        g.drawLine ({ base, tip }, 2.0f);
     }
 };
 } // namespace bm::ui

@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.2.0** (all three build stages are in this release)
+**Version 0.2.1** (all three build stages, plus a lighter look and a graphical multiband compressor)
 
 ## The signal chain
 
@@ -19,7 +19,7 @@ Click a stage to open its settings in the panel below the chain.
 | 4 | Tonal EQ | 6 bands (low shelf, 4 bells, high shelf) plus tilt. Each band acts on stereo, mid only or side only. Minimum-phase in Live mode, linear-phase in Broadcast mode. The curve is drawn over the spectrum |
 | 5 | Saturation | Tube, tape or transformer, anti-aliased, with amount and mix |
 | 6 | Exciter / bass | Air exciter above a chosen frequency, and a bass enhancer that adds harmonics of the low end |
-| 7 | Multiband compressor | 4 bands on Linkwitz-Riley crossovers, per-band threshold, ratio, attack, release, makeup, gain-reduction bars and a solo button |
+| 7 | Multiband compressor | 4 bands on Linkwitz-Riley crossovers. The graph shows each band's level, gain reduction and threshold; drag the crossovers sideways and the thresholds up and down. The selected band's ratio, attack, release, makeup and solo sit in one row below |
 | 8 | Auto leveler | Slow gain rider toward a target LUFS with range limit, speed, a gate that freezes the gain in silence, and a speech/music detector (Auto, Speech or Music) |
 | 9 | Stereo utilities | Width, mid and side gain, polarity flips, mono sum, lip-sync delay 0 to 500 ms |
 | 10 | Soft clipper | Smooth tanh shoulder with an adjustable linear zone, anti-aliased |

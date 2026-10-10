@@ -50,6 +50,7 @@ public:
 
     // Live readouts for the module panels.
     float mbcBandGr (int band) const noexcept { return chain.mbc.grDb (band); }
+    float mbcBandLevel (int band) const noexcept { return chain.mbc.levelDb (band); }
     float levelerGainDb() const noexcept     { return chain.lev.gainDb(); }
     float levelerSpeech() const noexcept     { return chain.lev.speechAmount(); }
     float bypassMatchOffsetDb() const noexcept { return chain.matchOffsetDb(); }

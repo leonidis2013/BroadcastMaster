@@ -38,7 +38,8 @@ public:
             {
                 items.push_back ({ std::make_unique<ParamControl> (p.apvts, s, ParamControl::Style::Knob),
                                    ParamControl::preferredWidth (s, ParamControl::Style::Knob),
-                                   ParamControl::preferredHeight (s, ParamControl::Style::Knob), s.group });
+                                   ParamControl::preferredHeight (s, ParamControl::Style::Knob), s.group,
+                                   s.kind == bm::params::Kind::Choice });
                 addAndMakeVisible (*items.back().control);
             }
 
@@ -83,14 +84,38 @@ public:
         }
     }
 
+    // Everything sits in ONE row: knobs side by side, groups next to each other under their heading, and
+    // consecutive switches stacked in a single column. If the row would not fit, the knobs get narrower.
     void resized() override
     {
-        auto r = getLocalBounds().reduced (10, 6);
+        auto r = getLocalBounds().reduced (12, 8);
         auto title = r.removeFromTop (20);
         if (enable) enable->setBounds (title.removeFromRight (110));
-        r.removeFromTop (4);
+        r.removeFromTop (6);
 
-        const int descW = juce::jlimit (240, 340, r.getWidth() / 3);
+        const int gap = 12, groupGap = 26;
+        int descW = juce::jlimit (220, 320, r.getWidth() / 4);
+        auto layoutWidth = [&] (int knobW)
+        {
+            int total = 0;
+            bool prevStack = false;
+            juce::String lastG;
+            bool first = true;
+            for (auto& it : items)
+            {
+                const bool stack = it.control->isSwitch();
+                const int w = stack ? it.w : (it.isChoice ? juce::jmax (knobW, 110) : knobW);
+                if (! first) total += (it.group != lastG ? groupGap : (stack && prevStack ? 0 : gap));
+                if (! (stack && prevStack)) total += w;
+                prevStack = stack; lastG = it.group; first = false;
+            }
+            return total;
+        };
+
+        int knobW = 92;
+        while (knobW > 66 && layoutWidth (knobW) > r.getWidth() - descW - 12) knobW -= 2;
+        while (descW > 190 && layoutWidth (knobW) > r.getWidth() - descW - 12) descW -= 10;
+
         auto right = r.removeFromRight (descW);
         r.removeFromRight (12);
         descArea = right.removeFromTop (juce::jmax (60, right.getHeight() - 56));
@@ -98,28 +123,40 @@ public:
         controlsArea = r;
 
         headings.clear();
-        int x = r.getX(), y = r.getY(), rowH = 0;
-        juce::String lastGroup;
+        bool anyGroup = false;
+        for (auto& it : items) anyGroup = anyGroup || it.group.isNotEmpty();
+        const int headH = anyGroup ? 18 : 0;
+        int rowH = 0;
+        for (auto& it : items) rowH = juce::jmax (rowH, it.h);
+        const int y0 = r.getY() + headH + juce::jmax (0, (r.getHeight() - headH - rowH) / 2);
+
+        int x = r.getX(), stackY = 0;
+        bool prevStack = false;
+        juce::String lastG;
+        bool first = true;
         for (auto& it : items)
         {
-            const bool newGroup = it.group != lastGroup;
-            if (newGroup && it.group.isNotEmpty())
-            {
-                if (x > r.getX()) { x = r.getX(); y += rowH + 8; rowH = 0; }
-                headings.push_back ({ it.group, juce::Rectangle<int> (x, y, 220, 16) });
-                y += 18;
-            }
-            lastGroup = it.group;
+            const bool stack = it.control->isSwitch();
+            const int w = stack ? it.w : (it.isChoice ? juce::jmax (knobW, 110) : knobW);
+            const bool newGroup = ! first && it.group != lastG;
+            if (! first) x += newGroup ? groupGap : (stack && prevStack ? 0 : gap);
 
-            if (x + it.w > r.getRight() && x > r.getX()) { x = r.getX(); y += rowH + 8; rowH = 0; }
-            it.control->setBounds (x, y, it.w, it.h);
-            x += it.w + 10;
-            rowH = juce::jmax (rowH, it.h);
+            if (it.group != lastG || first)
+            {
+                if (it.group.isNotEmpty())
+                    headings.push_back ({ it.group, juce::Rectangle<int> (x, r.getY(), 220, 16) });
+            }
+
+            if (stack && prevStack) { stackY += it.h + 6; it.control->setBounds (x - it.w, y0 + stackY, it.w, it.h); }
+            else { stackY = 0; it.control->setBounds (x, y0, w, it.h); }
+
+            if (! (stack && prevStack)) x += w;
+            prevStack = stack; lastG = it.group; first = false;
         }
     }
 
 private:
-    struct Item { std::unique_ptr<ParamControl> control; int w, h; juce::String group; };
+    struct Item { std::unique_ptr<ParamControl> control; int w, h; juce::String group; bool isChoice = false; };
     struct Heading { juce::String text; juce::Rectangle<int> area; };
 
     int stage;
@@ -132,7 +169,7 @@ private:
     juce::Rectangle<int> descArea, liveArea, controlsArea;
 };
 
-// Six-band mid/side EQ plus tilt.
+// Six-band mid/side EQ plus tilt. Pick a band, then its settings sit in one row.
 class EqPanel : public juce::Component
 {
 public:
@@ -143,90 +180,125 @@ public:
         for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
         {
             const bool shelf = b == 0 || b == bm::dsp::EqParams::kBands - 1;
-            add (on[(size_t) b], p, *spec (eqId (b, "on")), ParamControl::Style::Bar, "On");
-            add (freq[(size_t) b], p, *spec (eqId (b, "freq")), ParamControl::Style::Bar, "Freq", 40);
-            add (gain[(size_t) b], p, *spec (eqId (b, "gain")), ParamControl::Style::Bar, "Gain", 40);
-            add (q[(size_t) b], p, *spec (eqId (b, "q")), ParamControl::Style::Bar, shelf ? "Slope" : "Q", 40);
-            add (target[(size_t) b], p, *spec (eqId (b, "tgt")), ParamControl::Style::Bar, "Acts on", 52);
+            add (freq[(size_t) b], *spec (eqId (b, "freq")), "Frequency");
+            add (gain[(size_t) b], *spec (eqId (b, "gain")), "Gain");
+            add (q[(size_t) b], *spec (eqId (b, "q")), shelf ? "Slope" : "Q");
+            add (target[(size_t) b], *spec (eqId (b, "tgt")), "Acts on");
+            onAttach[(size_t) b] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, eqId (b, "on"), bandOn[(size_t) b]);
+            bandOn[(size_t) b].setButtonText ("Band on");
+            addChildComponent (bandOn[(size_t) b]);
+
+            auto& sel = bandBtn[(size_t) b];
+            sel.setButtonText (names[b]);
+            sel.setClickingTogglesState (false);
+            sel.onClick = [this, b] { proc.apvts.state.setProperty ("eqBand", b, nullptr); showBand(); };
+            addAndMakeVisible (sel);
         }
-        add (tilt, p, *spec ("eq_tilt"), ParamControl::Style::Bar, "Tilt", 34);
+        add (tilt, *spec ("eq_tilt"), "Tilt");
+        tilt->setVisible (true);
         enable = std::make_unique<StageEnableToggle> (p.apvts, "en_eq");
         addAndMakeVisible (*enable);
+        showBand();
     }
 
-    void tick() {}
+    void tick()
+    {
+        if (band() != shownBand) showBand();
+        for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
+            bandBtn[(size_t) b].setToggleState (b == shownBand, juce::dontSendNotification);
+    }
 
     void paint (juce::Graphics& g) override
     {
         const auto& p = pal();
         drawPanel (g, getLocalBounds().toFloat(), "Tonal EQ");
-        static const char* names[] { "LOW SHELF", "BELL 1", "BELL 2", "BELL 3", "BELL 4", "HIGH SHELF" };
         g.setColour (p.textDim);
         g.setFont (font (10.5f, true));
-        for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
-            g.drawText (names[b], headerRects[(size_t) b], juce::Justification::centredLeft);
+        g.drawText (juce::String (names[shownBand]) + " SETTINGS", bandHeader, juce::Justification::centredLeft);
         g.drawText ("TILT", tiltHeader, juce::Justification::centredLeft);
+        g.setColour (p.border);
+        g.drawVerticalLine (divider, (float) bandHeader.getY(), (float) getHeight() - 14.0f);
 
+        g.setColour (p.textDim);
         g.setFont (font (11.0f));
         g.drawFittedText ("Each band can act on the whole signal, the mid only or the side only. The curve is drawn over the spectrum. "
                           "Live mode = minimum phase, no latency. Broadcast mode = linear phase, adds latency. Tilt is a broad see-saw around 1 kHz.",
-                          noteArea, juce::Justification::topLeft, 6, 1.0f);
-
-        g.setColour (p.border);
-        for (int b = 1; b <= bm::dsp::EqParams::kBands; ++b)
-            g.drawVerticalLine (colX[(size_t) b] - 5, (float) headerRects[0].getY(), (float) getHeight() - 8.0f);
+                          noteArea, juce::Justification::topLeft, 7, 1.0f);
     }
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (10, 6);
+        auto r = getLocalBounds().reduced (12, 8);
         auto title = r.removeFromTop (20);
         enable->setBounds (title.removeFromRight (110));
         r.removeFromTop (6);
 
-        const int cols = bm::dsp::EqParams::kBands + 1;
-        const int w = r.getWidth() / cols;
-        for (int c = 0; c <= cols; ++c) colX[(size_t) c] = r.getX() + w * c;
-
+        auto sel = r.removeFromTop (26);
         for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
         {
-            auto col = juce::Rectangle<int> (colX[(size_t) b], r.getY(), w - 10, r.getHeight());
-            auto head = col.removeFromTop (22);
-            on[(size_t) b]->setBounds (head.removeFromRight (50));
-            headerRects[(size_t) b] = head;
-            col.removeFromTop (4);
-            for (auto* c : { freq[(size_t) b].get(), gain[(size_t) b].get(), q[(size_t) b].get(), target[(size_t) b].get() })
-            {
-                c->setBounds (col.removeFromTop (30));
-            }
+            bandBtn[(size_t) b].setBounds (sel.removeFromLeft (b == 0 || b == 5 ? 104 : 80));
+            sel.removeFromLeft (6);
         }
+        sel.removeFromLeft (10);
+        for (auto& t : bandOn) t.setBounds (sel.getX(), sel.getY(), 100, 26);
+        r.removeFromTop (8);
 
-        auto col = juce::Rectangle<int> (colX[(size_t) (cols - 1)], r.getY(), w - 6, r.getHeight());
-        tiltHeader = col.removeFromTop (22);
-        col.removeFromTop (4);
-        tilt->setBounds (col.removeFromTop (30));
-        col.removeFromTop (6);
-        noteArea = col;
+        const int w = 100, h = juce::jmin (108, r.getHeight() - 18);
+        auto row = r.withTrimmedTop (18);
+        bandHeader = r.withHeight (16).withWidth (w * 4);
+        int x = r.getX();
+        for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
+        {
+            int cx = x;
+            for (auto* c : { freq[(size_t) b].get(), gain[(size_t) b].get(), q[(size_t) b].get() })
+            { c->setBounds (cx, row.getY(), w, h); cx += w; }
+            target[(size_t) b]->setBounds (cx + 4, row.getY(), 140, juce::jmin (h, 52));
+        }
+        x += w * 3 + 150;
+        divider = x + 10;
+        x += 24;
+        tiltHeader = juce::Rectangle<int> (x, r.getY(), w, 16);
+        tilt->setBounds (x, row.getY(), w, h);
+        x += w + 20;
+        noteArea = juce::Rectangle<int> (x, r.getY() + 4, juce::jmax (100, r.getRight() - x), r.getHeight() - 4);
     }
 
 private:
-    void add (std::unique_ptr<ParamControl>& slot, BroadcastMasterProcessor& p, const bm::params::ParamSpec& s,
-              ParamControl::Style st, const juce::String& label, int labelW = 56)
+    static constexpr const char* names[6] { "LOW SHELF", "BELL 1", "BELL 2", "BELL 3", "BELL 4", "HIGH SHELF" };
+
+    void add (std::unique_ptr<ParamControl>& slot, const bm::params::ParamSpec& s, const juce::String& label)
     {
-        slot = std::make_unique<ParamControl> (p.apvts, s, st, label, labelW);
-        addAndMakeVisible (*slot);
+        slot = std::make_unique<ParamControl> (proc.apvts, s, ParamControl::Style::Knob, label);
+        addChildComponent (*slot);
+    }
+
+    int band() const { return juce::jlimit (0, bm::dsp::EqParams::kBands - 1, (int) proc.apvts.state.getProperty ("eqBand", 0)); }
+
+    void showBand()
+    {
+        shownBand = band();
+        for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
+        {
+            const bool v = b == shownBand;
+            for (auto* c : { freq[(size_t) b].get(), gain[(size_t) b].get(), q[(size_t) b].get(), target[(size_t) b].get() }) c->setVisible (v);
+            bandOn[(size_t) b].setVisible (v);
+        }
+        repaint();
     }
 
     BroadcastMasterProcessor& proc;
-    std::array<std::unique_ptr<ParamControl>, bm::dsp::EqParams::kBands> on, freq, gain, q, target;
+    std::array<std::unique_ptr<ParamControl>, bm::dsp::EqParams::kBands> freq, gain, q, target;
     std::unique_ptr<ParamControl> tilt;
+    std::array<juce::ToggleButton, bm::dsp::EqParams::kBands> bandOn;
+    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>, bm::dsp::EqParams::kBands> onAttach;
+    std::array<juce::TextButton, bm::dsp::EqParams::kBands> bandBtn;
     std::unique_ptr<StageEnableToggle> enable;
-    std::array<juce::Rectangle<int>, bm::dsp::EqParams::kBands> headerRects;
-    std::array<int, bm::dsp::EqParams::kBands + 2> colX {};
-    juce::Rectangle<int> tiltHeader, noteArea;
+    juce::Rectangle<int> bandHeader, tiltHeader, noteArea;
+    int divider = 0, shownBand = -1;
 };
 
-// Four-band multiband compressor: per-band controls with a gain-reduction bar, plus the crossovers.
+// Four-band multiband compressor. The graph lives in the big spectrum window (crossovers and thresholds are
+// dragged there); this panel holds the settings of the selected band in one row, plus the shared settings.
 class MbcPanel : public juce::Component
 {
 public:
@@ -236,38 +308,49 @@ public:
         auto spec = [] (const std::string& id) { return bm::params::findSpec (id); };
         for (int b = 0; b < bm::dsp::MbcParams::kBands; ++b)
         {
-            add (on[(size_t) b], *spec (mbId (b, "on")), "On");
-            add (thr[(size_t) b], *spec (mbId (b, "thr")), "Thresh", 52);
-            add (ratio[(size_t) b], *spec (mbId (b, "ratio")), "Ratio", 52);
-            add (atk[(size_t) b], *spec (mbId (b, "atk")), "Attack", 52);
-            add (rel[(size_t) b], *spec (mbId (b, "rel")), "Release", 52);
-            add (mk[(size_t) b], *spec (mbId (b, "mk")), "Makeup", 52);
+            add (thr[(size_t) b], *spec (mbId (b, "thr")), "Threshold");
+            add (ratio[(size_t) b], *spec (mbId (b, "ratio")), "Ratio");
+            add (atk[(size_t) b], *spec (mbId (b, "atk")), "Attack");
+            add (rel[(size_t) b], *spec (mbId (b, "rel")), "Release");
+            add (mk[(size_t) b], *spec (mbId (b, "mk")), "Makeup");
+            on[(size_t) b] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, mbId (b, "on"), bandOn[(size_t) b]);
+            bandOn[(size_t) b].setButtonText ("Band on");
+            addChildComponent (bandOn[(size_t) b]);
 
-            auto& s = solo[(size_t) b];
-            s.setButtonText ("S");
-            s.setClickingTogglesState (false);
-            s.setTooltip ("Listen to this band on the solo bus. Uses Monitor B and switches the solo bus on.");
-            s.onClick = [this, b] { toggleSolo (b); };
-            addAndMakeVisible (s);
+            auto& sel = bandBtn[(size_t) b];
+            sel.setButtonText (bandNames[b]);
+            sel.setClickingTogglesState (false);
+            sel.setColour (juce::TextButton::buttonOnColourId, pal().bandCol[b]);
+            sel.onClick = [this, b] { selectBand (b); };
+            addAndMakeVisible (sel);
         }
-        add (x1, *spec ("mb_x1"), "Xover 1", 56);
-        add (x2, *spec ("mb_x2"), "Xover 2", 56);
-        add (x3, *spec ("mb_x3"), "Xover 3", 56);
-        add (knee, *spec ("mb_knee"), "Knee", 56);
-        add (mix, *spec ("mb_mix"), "Mix", 56);
+        soloBtn.setButtonText ("Solo band");
+        soloBtn.setClickingTogglesState (false);
+        soloBtn.setTooltip ("Listen to this band on the solo bus. Uses Monitor B and switches the solo bus on.");
+        soloBtn.onClick = [this] { toggleSolo (band()); };
+        addAndMakeVisible (soloBtn);
+
+        add (x1, *spec ("mb_x1"), "Crossover 1");
+        add (x2, *spec ("mb_x2"), "Crossover 2");
+        add (x3, *spec ("mb_x3"), "Crossover 3");
+        add (knee, *spec ("mb_knee"), "Knee");
+        add (mix, *spec ("mb_mix"), "Mix");
+        for (auto* c : { x1.get(), x2.get(), x3.get(), knee.get(), mix.get() }) c->setVisible (true);
+
         enable = std::make_unique<StageEnableToggle> (p.apvts, "en_mbc");
         addAndMakeVisible (*enable);
+        showBand();
     }
 
     void tick()
     {
+        if (band() != shownBand) showBand();
         for (int b = 0; b < bm::dsp::MbcParams::kBands; ++b)
         {
-            const float gr = proc.mbcBandGr (b);
-            shownGr[(size_t) b] += (gr - shownGr[(size_t) b]) * 0.4f;
-            solo[(size_t) b].setToggleState (isSoloing (b), juce::dontSendNotification);
+            bandBtn[(size_t) b].setColour (juce::TextButton::buttonOnColourId, pal().bandCol[b]);
+            bandBtn[(size_t) b].setToggleState (b == shownBand, juce::dontSendNotification);
         }
-        repaint();
+        soloBtn.setToggleState (isSoloing (shownBand), juce::dontSendNotification);
     }
 
     void paint (juce::Graphics& g) override
@@ -275,83 +358,91 @@ public:
         const auto& p = pal();
         drawPanel (g, getLocalBounds().toFloat(), "Multiband Compressor");
 
-        const float f1 = raw ("mb_x1"), f2 = raw ("mb_x2"), f3 = raw ("mb_x3");
-        const juce::String ranges[4] { "below " + hz (f1), hz (f1) + " - " + hz (f2), hz (f2) + " - " + hz (f3), "above " + hz (f3) };
-
-        for (int b = 0; b < bm::dsp::MbcParams::kBands; ++b)
-        {
-            g.setColour (p.textDim);
-            g.setFont (font (10.5f, true));
-            const auto hr = headerRects[(size_t) b];
-            g.drawText ("BAND " + juce::String (b + 1), hr.withHeight (14), juce::Justification::centredLeft);
-            g.setFont (font (10.0f));
-            g.drawText (ranges[b], hr.withTrimmedTop (13), juce::Justification::centredLeft);
-
-            // gain reduction bar, 0 to 18 dB, filling downward
-            const auto bar = barRects[(size_t) b].toFloat();
-            g.setColour (p.bg.withAlpha (p.dark ? 0.7f : 0.5f));
-            g.fillRoundedRectangle (bar, 2.0f);
-            const float h = bar.getHeight() * juce::jlimit (0.0f, 1.0f, shownGr[(size_t) b] / 18.0f);
-            g.setColour (p.warn);
-            g.fillRect (bar.withHeight (h));
-            g.setColour (p.textDim);
-            g.setFont (monoFont (9.0f));
-            g.drawText (juce::String (shownGr[(size_t) b], 1), bar.withY (bar.getBottom() + 1.0f).withHeight (11.0f).expanded (8.0f, 0.0f), juce::Justification::centred);
-        }
-
         g.setColour (p.textDim);
         g.setFont (font (10.5f, true));
-        g.drawText ("CROSSOVERS AND SHARED", globalHeader, juce::Justification::centredLeft);
+        g.drawText ((juce::String ("BAND ") + juce::String (shownBand + 1) + " SETTINGS").toUpperCase(), bandHeader, juce::Justification::centredLeft);
+        g.drawText ("SHARED", sharedHeader, juce::Justification::centredLeft);
 
         g.setColour (p.border);
-        for (int b = 1; b <= bm::dsp::MbcParams::kBands; ++b)
-            g.drawVerticalLine (colX[(size_t) b] - 6, (float) headerRects[0].getY(), (float) getHeight() - 8.0f);
+        g.drawVerticalLine (divider, (float) bandHeader.getY(), (float) getHeight() - 14.0f);
+
+        g.setColour (p.textDim);
+        g.setFont (font (11.0f));
+        g.drawText ("Drag on the graph: crossovers sideways, thresholds up and down.", hint, juce::Justification::centredRight);
     }
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (10, 6);
+        auto r = getLocalBounds().reduced (12, 8);
         auto title = r.removeFromTop (20);
         enable->setBounds (title.removeFromRight (110));
+        hint = title.withTrimmedLeft (200).withTrimmedRight (16);
         r.removeFromTop (6);
 
-        const int cols = bm::dsp::MbcParams::kBands + 1;
-        const int w = r.getWidth() / cols;
-        for (int c = 0; c <= cols; ++c) colX[(size_t) c] = r.getX() + w * c;
+        auto sel = r.removeFromTop (26);
+        for (int b = 0; b < bm::dsp::MbcParams::kBands; ++b)
+            bandBtn[(size_t) b].setBounds (sel.removeFromLeft (112)), sel.removeFromLeft (6);
+        sel.removeFromLeft (10);
+        for (auto& t : bandOn) t.setBounds (sel.getX(), sel.getY(), 100, 26);
+        sel.removeFromLeft (110);
+        soloBtn.setBounds (sel.removeFromLeft (100));
+        r.removeFromTop (8);
 
+        // one row: five band knobs | shared knobs
+        const int total = 10;
+        const int gapDiv = 30;
+        const int w = juce::jmin (100, (r.getWidth() - gapDiv) / total);
+        const int h = juce::jmin (108, r.getHeight() - 18);
+        auto row = r.withTrimmedTop (18);
+        bandHeader = r.withHeight (16).withWidth (w * 5);
+        int x = r.getX();
         for (int b = 0; b < bm::dsp::MbcParams::kBands; ++b)
         {
-            auto col = juce::Rectangle<int> (colX[(size_t) b], r.getY(), w - 12, r.getHeight());
-            auto head = col.removeFromTop (28);
-            solo[(size_t) b].setBounds (head.removeFromRight (24).withSizeKeepingCentre (24, 22));
-            head.removeFromRight (4);
-            on[(size_t) b]->setBounds (head.removeFromRight (50));
-            headerRects[(size_t) b] = head;
-            col.removeFromTop (4);
-
-            auto body = col;
-            barRects[(size_t) b] = body.removeFromLeft (8).withTrimmedBottom (14);
-            body.removeFromLeft (4);
+            int cx = x;
             for (auto* c : { thr[(size_t) b].get(), ratio[(size_t) b].get(), atk[(size_t) b].get(), rel[(size_t) b].get(), mk[(size_t) b].get() })
-                c->setBounds (body.removeFromTop (26));
+            {
+                c->setBounds (cx, row.getY(), w, h);
+                cx += w;
+            }
         }
-
-        auto col = juce::Rectangle<int> (colX[(size_t) (cols - 1)], r.getY(), w - 6, r.getHeight());
-        globalHeader = col.removeFromTop (28);
-        col.removeFromTop (4);
+        x += w * 5 + gapDiv / 2;
+        divider = x;
+        x += gapDiv / 2;
+        sharedHeader = juce::Rectangle<int> (x, r.getY(), w * 5, 16);
         for (auto* c : { x1.get(), x2.get(), x3.get(), knee.get(), mix.get() })
-            c->setBounds (col.removeFromTop (26));
+        {
+            c->setBounds (x, row.getY(), w, h);
+            x += w;
+        }
     }
 
 private:
-    void add (std::unique_ptr<ParamControl>& slot, const bm::params::ParamSpec& s, const juce::String& label, int labelW = 56)
+    static constexpr const char* bandNames[4] { "1  LOW", "2  LOW-MID", "3  HIGH-MID", "4  HIGH" };
+
+    void add (std::unique_ptr<ParamControl>& slot, const bm::params::ParamSpec& s, const juce::String& label)
     {
-        slot = std::make_unique<ParamControl> (proc.apvts, s, ParamControl::Style::Bar, label, labelW);
-        addAndMakeVisible (*slot);
+        slot = std::make_unique<ParamControl> (proc.apvts, s, ParamControl::Style::Knob, label);
+        addChildComponent (*slot);
+    }
+
+    int band() const { return juce::jlimit (0, 3, (int) proc.apvts.state.getProperty ("mbcBand", 0)); }
+
+    void selectBand (int b) { proc.apvts.state.setProperty ("mbcBand", b, nullptr); showBand(); }
+
+    void showBand()
+    {
+        shownBand = band();
+        for (int b = 0; b < bm::dsp::MbcParams::kBands; ++b)
+        {
+            const bool v = b == shownBand;
+            for (auto* c : { thr[(size_t) b].get(), ratio[(size_t) b].get(), atk[(size_t) b].get(), rel[(size_t) b].get(), mk[(size_t) b].get() })
+                c->setVisible (v);
+            bandOn[(size_t) b].setVisible (v);
+        }
+        repaint();
     }
 
     float raw (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
-    static juce::String hz (float f) { return f >= 1000.0f ? juce::String (f / 1000.0f, 2) + "k" : juce::String ((int) std::lround (f)); }
 
     bool isSoloing (int b) const
     {
@@ -368,14 +459,15 @@ private:
     }
 
     BroadcastMasterProcessor& proc;
-    std::array<std::unique_ptr<ParamControl>, 4> on, thr, ratio, atk, rel, mk;
+    std::array<std::unique_ptr<ParamControl>, 4> thr, ratio, atk, rel, mk;
     std::unique_ptr<ParamControl> x1, x2, x3, knee, mix;
-    std::array<juce::TextButton, 4> solo;
+    std::array<juce::ToggleButton, 4> bandOn;
+    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>, 4> on;
+    std::array<juce::TextButton, 4> bandBtn;
+    juce::TextButton soloBtn;
     std::unique_ptr<StageEnableToggle> enable;
-    std::array<juce::Rectangle<int>, 4> headerRects, barRects;
-    std::array<int, 6> colX {};
-    std::array<float, 4> shownGr {};
-    juce::Rectangle<int> globalHeader;
+    juce::Rectangle<int> bandHeader, sharedHeader, hint;
+    int divider = 0, shownBand = -1;
 };
 
 // Holds one panel per stage and shows the selected one.

@@ -34,7 +34,7 @@ public:
     void reset() noexcept
     {
         for (auto& c : ch) c.reset();
-        for (int b = 0; b < MbcParams::kBands; ++b) { envDb[b] = -120.0f; peak[b] = 0.0f; }
+        for (int b = 0; b < MbcParams::kBands; ++b) { envDb[b] = -120.0f; peak[b] = 0.0f; gr[b].store (0.0f); lvlOut[b].store (-120.0f); }
     }
 
     void setParams (const MbcParams& p)
@@ -97,11 +97,17 @@ public:
         }
 
         for (int b = 0; b < MbcParams::kBands; ++b)
+        {
             gr[b].store (grMax[b], std::memory_order_relaxed);
+            lvlOut[b].store (envDb[b], std::memory_order_relaxed);
+        }
     }
 
     // Largest gain reduction (dB, positive) seen in the last block, per band.
     float grDb (int band) const noexcept { return gr[band].load (std::memory_order_relaxed); }
+
+    // Detector level (dB) of a band after the last block, the value that is compared with the threshold.
+    float levelDb (int band) const noexcept { return lvlOut[band].load (std::memory_order_relaxed); }
 
     // Static compression curve: reduction in dB for a given level.
     static float gainReductionDb (float levelDb, float thrDb, float ratio, float kneeDb) noexcept
@@ -167,6 +173,6 @@ private:
     Channel ch[2];
     float envDb[MbcParams::kBands] {}, peak[MbcParams::kBands] {};
     float atk[MbcParams::kBands] {}, rel[MbcParams::kBands] {}, peakDecay[MbcParams::kBands] {};
-    std::atomic<float> gr[MbcParams::kBands] {};
+    std::atomic<float> gr[MbcParams::kBands] {}, lvlOut[MbcParams::kBands] {};
 };
 } // namespace bm::dsp
