@@ -1,0 +1,14 @@
+#!/bin/sh
+# BroadcastMaster installer: remove every older copy first, so hosts never load a stale or duplicate plugin
+# (e.g. "BroadcastMaster 2.vst3" left behind by Finder's "Keep Both").
+rm -rf "/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3" /Library/Audio/Plug-Ins/VST3/BroadcastMaster\ *.vst3
+
+# copies that were dragged into the logged-in user's own plug-in folder
+user=$(stat -f%Su /dev/console 2>/dev/null)
+if [ -n "$user" ] && [ "$user" != "root" ]; then
+    home=$(dscl . -read "/Users/$user" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+    if [ -n "$home" ] && [ -d "$home/Library/Audio/Plug-Ins/VST3" ]; then
+        rm -rf "$home/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3" "$home"/Library/Audio/Plug-Ins/VST3/BroadcastMaster\ *.vst3
+    fi
+fi
+exit 0

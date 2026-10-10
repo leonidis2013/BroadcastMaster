@@ -77,10 +77,39 @@ jobs:
         if: runner.os == 'macOS'
         run: ditto -c -k --keepParent "${{ steps.locate.outputs.path }}" BroadcastMaster-macOS-VST3.zip
 
+      - name: Read version from CMakeLists.txt
+        id: version
+        shell: bash
+        run: echo "version=$(sed -n 's/^project(BroadcastMaster VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Mac installer (.pkg)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set +e
+          installer/mac/build-pkg.sh "${{ steps.version.outputs.version }}" "${{ steps.locate.outputs.path }}" BroadcastMaster-macOS-Installer.pkg > pkg.log 2>&1
+          status=$?
+          cat pkg.log
+          if [ $status -ne 0 ]; then tail -25 pkg.log | sed 's/^/::error::/'; fi
+          exit $status
+
+      - name: Build the Windows installer (.exe)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          $vst3 = (Resolve-Path "${{ steps.locate.outputs.path }}").Path
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DSourceVst3=$vst3" "/DOutputDir=$PWD" installer\windows\BroadcastMaster.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
-          name: BroadcastMaster-${{ matrix.name }}-VST3
-          path: BroadcastMaster-*-VST3.zip
+          name: BroadcastMaster-${{ matrix.name }}
+          path: |
+            BroadcastMaster-${{ matrix.name }}-VST3.zip
+            BroadcastMaster-${{ matrix.name }}-Installer.*
+          if-no-files-found: error
 
   release:
     name: Publish downloads
@@ -93,6 +122,26 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Release notes
+        run: |
+          {
+            echo "**BroadcastMaster** - built $(date -u '+%Y-%m-%d %H:%M UTC') from \`${GITHUB_SHA::7}\`"
+            echo
+            echo "### Mac: BroadcastMaster-macOS-Installer.pkg"
+            echo "1. Quit LiveProfessor (or any host), download the installer and double-click it."
+            echo "2. If macOS says it can't verify the installer: click **Done**, open **System Settings > Privacy & Security**, scroll down and click **Open Anyway** next to BroadcastMaster-macOS-Installer.pkg, then enter your password. (Needed once per download until the installer is signed with an Apple Developer ID.)"
+            echo "3. Click through the installer. It removes old BroadcastMaster copies, installs into /Library/Audio/Plug-Ins/VST3 and clears the macOS download block - no Terminal command needed."
+            echo "4. Reopen your host and rescan plug-ins."
+            echo
+            echo "### Windows: BroadcastMaster-Windows-Installer.exe"
+            echo "1. Close your host, download the installer and run it."
+            echo "2. If Windows shows **Windows protected your PC**, click **More info > Run anyway**, then **Yes** for administrator permission."
+            echo "3. Click through. It removes old BroadcastMaster copies and installs into C:\\Program Files\\Common Files\\VST3. It can be removed later from Settings > Apps."
+            echo "4. Reopen your host and rescan plug-ins."
+            echo
+            echo "The plain zips are here for manual installs."
+          } > notes.md
+
       - name: Publish as a GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,12 +149,10 @@ jobs:
         run: |
           ls -l dist
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
-            gh release create "$TAG" dist/*.zip --title "BroadcastMaster $TAG" --notes "Windows x64 and macOS universal VST3 builds."
+            gh release create "$GITHUB_REF_NAME" dist/* --title "BroadcastMaster $GITHUB_REF_NAME" --notes-file notes.md --latest=false
           else
-            # rolling release that always holds the newest build from main
+            # rolling release holding the newest build from main (the older "latest" prerelease is retired)
             gh release delete latest --cleanup-tag --yes 2>/dev/null || true
-            gh release create latest dist/*.zip --target "$GITHUB_SHA" --prerelease \
-              --title "Latest build" \
-              --notes "Newest build from main (${GITHUB_SHA::7}). Windows x64 and macOS universal (arm64 + x86_64) VST3, zipped."
+            gh release delete latest-build --cleanup-tag --yes 2>/dev/null || true
+            gh release create latest-build dist/* --target "$GITHUB_SHA" --title "Latest build" --notes-file notes.md --latest
           fi

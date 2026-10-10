@@ -1,0 +1,8 @@
+#!/bin/sh
+# Make sure macOS never treats the installed plugin as an unapproved download, and that every user can load it.
+p="/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3"
+if [ -d "$p" ]; then
+    xattr -dr com.apple.quarantine "$p" 2>/dev/null
+    chmod -R a+rX "$p"
+fi
+exit 0

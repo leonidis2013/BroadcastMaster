@@ -72,37 +72,30 @@ Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mon
 
 ## Installing
 
-Download the latest build from the [Releases page](https://github.com/leonidis2013/BroadcastMaster/releases/tag/latest)
-("Latest build"). It has one zip per platform: `BroadcastMaster-Windows-VST3.zip` and `BroadcastMaster-macOS-VST3.zip`
-(universal: Apple silicon and Intel).
+**Easiest: use the installer.** On the repository page open **Releases > Latest build**, or use the always-newest links:
 
-### Windows
+- Mac: https://github.com/leonidis2013/BroadcastMaster/releases/latest/download/BroadcastMaster-macOS-Installer.pkg
+- Windows: https://github.com/leonidis2013/BroadcastMaster/releases/latest/download/BroadcastMaster-Windows-Installer.exe
 
-1. Unzip `BroadcastMaster-Windows-VST3.zip`.
-2. Copy `BroadcastMaster.vst3` to `C:\Program Files\Common Files\VST3`.
-3. Rescan plug-ins in your host.
+(The links need the repository to be visible to you. If it is private, open the Releases page while signed in to GitHub.)
 
-### macOS
+The installers remove every older BroadcastMaster copy (including duplicates such as "BroadcastMaster 2.vst3"), install into the system VST3 folder, and on the Mac clear the download block so the plug-in loads without any Terminal command. Quit your host first and rescan plug-ins afterwards.
 
-The macOS build is ad-hoc signed, not notarised. A file downloaded in a browser carries a quarantine flag, so
-Gatekeeper will say the plug-in is damaged or from an unidentified developer, or the host will skip it. Remove the flag
-once, in Terminal:
+- **Mac:** double-click the .pkg. Because it is not signed with a paid Apple Developer ID, macOS first says it cannot verify it: click **Done**, open **System Settings > Privacy & Security**, click **Open Anyway** next to the installer and enter your password. It installs into `/Library/Audio/Plug-Ins/VST3` for all users.
+- **Windows:** run the .exe. If Windows shows "Windows protected your PC", click **More info > Run anyway**, then **Yes** for administrator permission. It installs into `C:\Program Files\Common Files\VST3` and can be removed from Settings > Apps.
 
-1. Unzip `BroadcastMaster-macOS-VST3.zip`.
-2. Copy `BroadcastMaster.vst3` to `~/Library/Audio/Plug-Ins/VST3` (this user only) or `/Library/Audio/Plug-Ins/VST3`
-   (all users).
-3. Remove the quarantine flag from the installed copy:
+### Manual install (zips)
 
-   ```
-   xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3
-   ```
+Each release also holds `BroadcastMaster-Windows-VST3.zip` and `BroadcastMaster-macOS-VST3.zip` (universal: Apple silicon and Intel).
 
-   For the system-wide folder use `sudo xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3`.
-4. Restart your host and rescan plug-ins.
+- **Windows:** unzip and copy `BroadcastMaster.vst3` to `C:\Program Files\Common Files\VST3`.
+- **macOS:** unzip and copy `BroadcastMaster.vst3` to `~/Library/Audio/Plug-Ins/VST3` (this user) or `/Library/Audio/Plug-Ins/VST3` (all users), then clear the download block in Terminal:
 
-To check that the flag is gone, run `xattr ~/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3`. It should not list
-`com.apple.quarantine`. If macOS still blocks it, open System Settings > Privacy & Security and choose "Open Anyway"
-for BroadcastMaster.
+  ```
+  xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3
+  ```
+
+  (Use `sudo` and the `/Library/...` path for the system-wide folder.) If macOS still blocks it, choose "Open Anyway" in System Settings > Privacy & Security.
 
 ## Keys
 
@@ -111,7 +104,7 @@ for BroadcastMaster.
 ## Building
 
 GitHub Actions builds Windows and macOS (universal arm64 + x86_64) VST3 files on every push; the latest
-build is published on the [Releases page](https://github.com/leonidis2013/BroadcastMaster/releases/tag/latest) (see
+build is published on the [Releases page](https://github.com/leonidis2013/BroadcastMaster/releases/latest) (see
 Installing above for the macOS `xattr` step).
 
 Local build (CMake 3.22 or newer; JUCE 8.0.8 is downloaded automatically):
