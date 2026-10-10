@@ -70,10 +70,39 @@ Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mon
   [Elgato's guide](https://www.elgato.com/explorer/news/streaming/how-to-use-vst3-plugins-in-obs-studio/)).
   The other option is to run it in LiveProfessor and send that mix into OBS through a virtual audio cable.
 
-Install the `.vst3` into the standard folder:
+## Installing
 
-- Windows: `C:\Program Files\Common Files\VST3`
-- macOS: `/Library/Audio/Plug-Ins/VST3` (or `~/Library/Audio/Plug-Ins/VST3`)
+Download the latest build from the [Releases page](https://github.com/leonidis2013/BroadcastMaster/releases/tag/latest)
+("Latest build"). It has one zip per platform: `BroadcastMaster-Windows-VST3.zip` and `BroadcastMaster-macOS-VST3.zip`
+(universal: Apple silicon and Intel).
+
+### Windows
+
+1. Unzip `BroadcastMaster-Windows-VST3.zip`.
+2. Copy `BroadcastMaster.vst3` to `C:\Program Files\Common Files\VST3`.
+3. Rescan plug-ins in your host.
+
+### macOS
+
+The macOS build is ad-hoc signed, not notarised. A file downloaded in a browser carries a quarantine flag, so
+Gatekeeper will say the plug-in is damaged or from an unidentified developer, or the host will skip it. Remove the flag
+once, in Terminal:
+
+1. Unzip `BroadcastMaster-macOS-VST3.zip`.
+2. Copy `BroadcastMaster.vst3` to `~/Library/Audio/Plug-Ins/VST3` (this user only) or `/Library/Audio/Plug-Ins/VST3`
+   (all users).
+3. Remove the quarantine flag from the installed copy:
+
+   ```
+   xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3
+   ```
+
+   For the system-wide folder use `sudo xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3`.
+4. Restart your host and rescan plug-ins.
+
+To check that the flag is gone, run `xattr ~/Library/Audio/Plug-Ins/VST3/BroadcastMaster.vst3`. It should not list
+`com.apple.quarantine`. If macOS still blocks it, open System Settings > Privacy & Security and choose "Open Anyway"
+for BroadcastMaster.
 
 ## Keys
 
@@ -81,9 +110,9 @@ Install the `.vst3` into the standard folder:
 
 ## Building
 
-GitHub Actions builds Windows and macOS (universal arm64 + x86_64) VST3 files on every push; download them from
-the workflow run's Artifacts. The macOS build is ad-hoc signed; if macOS blocks it, remove the quarantine flag with
-`xattr -dr com.apple.quarantine BroadcastMaster.vst3`.
+GitHub Actions builds Windows and macOS (universal arm64 + x86_64) VST3 files on every push; the latest
+build is published on the [Releases page](https://github.com/leonidis2013/BroadcastMaster/releases/tag/latest) (see
+Installing above for the macOS `xattr` step).
 
 Local build (CMake 3.22 or newer; JUCE 8.0.8 is downloaded automatically):
 
