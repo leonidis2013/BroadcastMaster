@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Jerod Ulicki
 // Tests for the assembled processing chain (no JUCE needed).
 // Build: g++ -std=c++17 -O2 -Wall -Wextra -ISource Tests/ChainTests.cpp -o chain_tests && ./chain_tests
 #include <cstdio>

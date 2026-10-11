@@ -139,6 +139,12 @@ compression curve, leveler convergence and gate, true-peak limiting against an i
 latency in both modes, aligned bypass, loudness matching, every solo source, click-free switching, and a stress
 run with every stage on. CI runs them (with address and undefined-behaviour sanitizers) before the plug-in builds.
 
+## License
+
+Copyright (C) 2026 Jerod Ulicki. BroadcastMaster is free software, licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0-only); see [LICENSE](LICENSE). You may use, share and modify it under those terms. If you distribute a modified version, you must publish its source under the same license.
+
+It is built with [JUCE](https://juce.com), which is used here under its AGPLv3 option. Third-party notices are in [THIRD_PARTY.md](THIRD_PARTY.md). VST is a trademark of Steinberg Media Technologies GmbH. This is not an official product of Steinberg, JUCE or any host application named here.
+
 ## Known limits
 
 - The speech/music detector in the leveler is a heuristic (share of low-energy 10 ms frames). Percussive music can

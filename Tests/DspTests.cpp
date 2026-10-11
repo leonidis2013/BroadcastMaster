@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Jerod Ulicki
 // Known-signal tests for the BroadcastMaster DSP modules (no JUCE needed).
 // Build: g++ -std=c++17 -O2 -Wall -Wextra -ISource Tests/DspTests.cpp -o dsp_tests && ./dsp_tests
 #include <cstdio>

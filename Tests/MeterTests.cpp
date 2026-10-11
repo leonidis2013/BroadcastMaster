@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Jerod Ulicki
 // Standalone checks for the metering engine (no JUCE needed).
 // Build:  g++ -std=c++17 -O2 -I../Source/Meters MeterTests.cpp -o meter_tests && ./meter_tests
 #include <cstdio>
