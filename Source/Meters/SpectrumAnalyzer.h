@@ -200,11 +200,12 @@ private:
         centres.clear(); loBin.clear(); hiBin.clear();
         const double binHz = sampleRate / kFftSize;
         const double nyq = sampleRate * 0.5;
-        const int kMin = (int) std::ceil (bandsPerOct * std::log2 (20.0 / 1000.0));
-        for (int k = kMin;; ++k)
+        // log-spaced centres from exactly 20 Hz to exactly 20 kHz, so the curve fills the whole axis
+        const int n = std::max (2, (int) std::lround (bandsPerOct * std::log2 (1000.0)) + 1);
+        for (int i = 0; i < n; ++i)
         {
-            const double fc = 1000.0 * std::pow (2.0, (double) k / bandsPerOct);
-            if (fc > 20000.0 || fc > nyq * 0.98) break;
+            const double fc = 20.0 * std::pow (1000.0, (double) i / (n - 1));
+            if (fc > nyq * 0.98) break;
             const double lo = fc * std::pow (2.0, -0.5 / bandsPerOct);
             const double hi = fc * std::pow (2.0, 0.5 / bandsPerOct);
             centres.push_back (fc);

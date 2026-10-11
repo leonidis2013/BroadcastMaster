@@ -88,7 +88,7 @@ private:
         std::array<std::array<std::atomic<float>*, 6>, bm::dsp::MbcParams::kBands> mb {}; // on, thr, ratio, atk, rel, makeup
         std::atomic<float> *mbKnee {}, *mbMix {};
         std::atomic<float> *lvTarget {}, *lvRange {}, *lvSpeed {}, *lvGate {}, *lvMode {};
-        std::atomic<float> *stWidth {}, *stMid {}, *stSide {}, *stFlipL {}, *stFlipR {}, *stMono {}, *stDelay {};
+        std::atomic<float> *stWidth {}, *stMid {}, *stSide {}, *stFlipL {}, *stFlipR {}, *stMono {}, *stDelay {}, *stExc {}, *stExcF {};
         std::atomic<float> *clThr {}, *clKnee {}, *lmRel {};
     } ptr;
 

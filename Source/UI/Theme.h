@@ -9,6 +9,7 @@ struct Palette
     juce::Colour bg, panel, panelRaised, border, grid, text, textDim, accent, good, warn, bad, inputCol, outputCol, onAccent;
     juce::Colour bandCol[4];   // multiband compressor bands
     juce::Colour reduction;    // gain reduction
+    juce::Colour eqCol[6];     // tonal EQ bands
 };
 
 // Same surfaces, accents and light/dark pairing as the LiveVoice dynamic EQ: a softer, lighter look.
@@ -20,7 +21,8 @@ inline const Palette& darkPalette()
         juce::Colour (0xff3ecf6e), juce::Colour (0xfff2c94c), juce::Colour (0xffef4c4c),
         juce::Colour (0xff4c8dff), juce::Colour (0xffff8a3d), juce::Colour (0xff0d1015),
         { juce::Colour (0xff2ec4b6), juce::Colour (0xff4c8dff), juce::Colour (0xffa78bfa), juce::Colour (0xfff6c453) },
-        juce::Colour (0xfff472b6) };
+        juce::Colour (0xfff472b6),
+        { juce::Colour (0xff2ec4b6), juce::Colour (0xff4cc9f0), juce::Colour (0xff7bdff2), juce::Colour (0xff80ed99), juce::Colour (0xfff7d070), juce::Colour (0xfff4978e) } };
     return p;
 }
 
@@ -32,7 +34,8 @@ inline const Palette& lightPalette()
         juce::Colour (0xff23a056), juce::Colour (0xffcf9a10), juce::Colour (0xffd63232),
         juce::Colour (0xff2563d6), juce::Colour (0xffe0661a), juce::Colour (0xffffffff),
         { juce::Colour (0xff0f9488), juce::Colour (0xff2563d6), juce::Colour (0xff7553e0), juce::Colour (0xffc98a0a) },
-        juce::Colour (0xffd2478f) };
+        juce::Colour (0xffd2478f),
+        { juce::Colour (0xff0f9488), juce::Colour (0xff1b8fc4), juce::Colour (0xff3a9fb5), juce::Colour (0xff3f9d55), juce::Colour (0xffc08a10), juce::Colour (0xffd2584c) } };
     return p;
 }
 

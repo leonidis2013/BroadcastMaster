@@ -40,13 +40,12 @@ public:
 
     void process (const float* l, const float* r, int n) noexcept
     {
-        constexpr double s2 = 0.70710678118654752;
         uint32_t w = scopeWrite.load (std::memory_order_relaxed);
 
         for (int i = 0; i < n; ++i)
         {
             const double a = l[i], b = r[i];
-            const double m = (a + b) * s2, s = (a - b) * s2, mono = (a + b) * 0.5;
+            const double m = (a + b) * 0.5, s = (a - b) * 0.5, mono = m;   // mid/side as half-sum and half-difference: a mono signal reads its channel level
 
             sxx   = smooth * sxx   + (1.0 - smooth) * a * a;
             syy   = smooth * syy   + (1.0 - smooth) * b * b;

@@ -18,7 +18,7 @@ inline const char* stageDescription (int stage)
         case bm::dsp::sExc:    return "The exciter adds air above the chosen frequency. The bass enhancer adds harmonics of the low end so bass stays audible on small speakers. Both add to the untouched signal.";
         case bm::dsp::sMbc:    return "";
         case bm::dsp::sLev:    return "A slow gain rider that moves the programme toward the target loudness. It holds still when the signal drops below the gate, so it never pumps up room noise. Auto mode uses a speech/music detector, which is a heuristic: choose Speech or Music if it guesses wrong.";
-        case bm::dsp::sStereo: return "Width, mid and side gain, polarity flips and mono sum. The lip-sync delay (0 to 500 ms) is intentional and is NOT reported to the host as latency.";
+        case bm::dsp::sStereo: return "Width, mid and side gain, polarity flips and mono sum. The stereo exciter adds harmonics to the side signal above its frequency, which opens up the top end without changing the mono sum. The lip-sync delay (0 to 500 ms) is intentional and is NOT reported to the host as latency.";
         case bm::dsp::sClip:   return "A smooth tanh shoulder that rounds peaks before the limiter, so the limiter has less to do. The linear zone is how much of the range stays untouched.";
         case bm::dsp::sLim:    return "Look-ahead limiter working on the 4x oversampled (true) peak. The ceiling is the knob on this stage's tile. Look-ahead is 1 ms in Live mode and 5 ms in Broadcast mode. Content right up against Nyquist can still overshoot by a fraction of a dB.";
         case bm::dsp::sOut:    return "A cut-only trim after the limiter (0 to -24 dB), for the last bit of level matching to the destination.";
@@ -205,7 +205,10 @@ public:
     {
         if (band() != shownBand) showBand();
         for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
+        {
+            bandBtn[(size_t) b].setColour (juce::TextButton::buttonOnColourId, pal().eqCol[b]);
             bandBtn[(size_t) b].setToggleState (b == shownBand, juce::dontSendNotification);
+        }
     }
 
     void paint (juce::Graphics& g) override
@@ -221,7 +224,7 @@ public:
 
         g.setColour (p.textDim);
         g.setFont (font (11.0f));
-        g.drawFittedText ("Each band can act on the whole signal, the mid only or the side only. The curve is drawn over the spectrum. "
+        g.drawFittedText ("Each band can act on the whole signal, the mid only or the side only. Each band has a numbered marker on the graph at its frequency: drag it to change frequency and gain. "
                           "Live mode = minimum phase, no latency. Broadcast mode = linear phase, adds latency. Tilt is a broad see-saw around 1 kHz.",
                           noteArea, juce::Justification::topLeft, 7, 1.0f);
     }

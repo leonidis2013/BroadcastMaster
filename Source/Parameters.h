@@ -193,6 +193,8 @@ inline const std::vector<ParamSpec>& moduleSpecs()
         flt ("st_width", "Width", "%", sStereo, 0.0f, 200.0f, 100.0f, 1.0f);
         flt ("st_mid", "Mid gain", "dB", sStereo, -12.0f, 12.0f, 0.0f, 0.1f);
         flt ("st_side", "Side gain", "dB", sStereo, -12.0f, 12.0f, 0.0f, 0.1f);
+        flt ("st_exc", "Amount", "%", sStereo, 0.0f, 100.0f, 0.0f, 1.0f, 0.0f, "Stereo exciter");
+        flt ("st_exc_f", "Frequency", "Hz", sStereo, 1500.0f, 12000.0f, 4000.0f, 10.0f, 5000.0f, "Stereo exciter");
         boolean ("st_flipl", "Polarity L", sStereo, false);
         boolean ("st_flipr", "Polarity R", sStereo, false);
         boolean ("st_mono", "Mono sum", sStereo, false);

@@ -59,7 +59,7 @@ public:
         // Mid / Side
         {
             auto row = r.removeFromTop (rowH * 2);
-            label (g, row, "MID / SIDE  (RMS bar, peak tick)");
+            label (g, row, "MID / SIDE  (RMS bar, peak tick; mono = channel level)");
             auto bars = row.withTrimmedTop (14).withTrimmedRight (74);
             const int h = bars.getHeight() / 2;
             paintLevelBar (g, bars.removeFromTop (h).toFloat().reduced (0.0f, 3.0f), s.midRms, s.midPeak, "M");
@@ -163,7 +163,8 @@ private:
 
         g.setColour (p.grid);
         g.drawEllipse (c.x - rad, c.y - rad, rad * 2.0f, rad * 2.0f, 1.0f);
-        g.drawEllipse (c.x - rad * 0.5f, c.y - rad * 0.5f, rad, rad, 1.0f);
+        g.drawEllipse (c.x - rad * 0.75f, c.y - rad * 0.75f, rad * 1.5f, rad * 1.5f, 1.0f);   // -12 dB
+        g.drawEllipse (c.x - rad * 0.5f, c.y - rad * 0.5f, rad, rad, 1.0f);                   // -24 dB
         g.drawLine (c.x, c.y - rad, c.x, c.y + rad);
         g.drawLine (c.x - rad, c.y, c.x + rad, c.y);
         g.drawLine (c.x - rad * 0.707f, c.y - rad * 0.707f, c.x + rad * 0.707f, c.y + rad * 0.707f);
@@ -176,15 +177,19 @@ private:
         g.drawText ("L", juce::Rectangle<float> (area.getX() + 3.0f, area.getY() + 3.0f, 12.0f, 12.0f), juce::Justification::centred);
         g.drawText ("R", juce::Rectangle<float> (area.getRight() - 15.0f, area.getY() + 3.0f, 12.0f, 12.0f), juce::Justification::centred);
 
-        const auto col = state.showOutput ? p.outputCol : p.inputCol;
-        const float k = rad * 0.7f * 0.70710678f * 1.4142136f; // full-scale mono reaches the top of the ring
+                const auto col = state.showOutput ? p.outputCol : p.inputCol;
+        // Left plots to the upper left, right to the upper right, mono straight up. The distance from the centre is
+        // the level in dB (0 dB = the edge, -48 dB = the centre), so ordinary programme material fills the display.
         g.saveState();
         g.reduceClipRegion (area.toNearestInt());
         for (int i = 0; i < kScopePoints; ++i)
         {
             const float l = scopeL[i], r = scopeR[i];
-            const float mid = (l + r) * 0.70710678f, sid = (l - r) * 0.70710678f;
-            const float x = c.x + sid * k * 1.0f, y = c.y - mid * k * 1.0f;
+            const float vx = (r - l) * 0.70710678f, vy = (l + r) * 0.70710678f;
+            const float m = std::sqrt (vx * vx + vy * vy);
+            if (m < 1.0e-4f) continue;
+            const float radius = rad * juce::jlimit (0.0f, 1.0f, (20.0f * std::log10 (m) + 48.0f) / 48.0f);
+            const float x = c.x + vx / m * radius, y = c.y - vy / m * radius;
             const float age = (float) i / (float) kScopePoints; // newest points are brightest
             g.setColour (col.withAlpha (0.12f + 0.55f * age));
             g.fillRect (x - 0.75f, y - 0.75f, 1.5f, 1.5f);

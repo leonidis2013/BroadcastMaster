@@ -53,6 +53,20 @@ int main()
         check ("997 Hz -23 dBFS stereo: mono loss dB", s.monoLossDb, 0.0, 0.1);
         check ("997 Hz -23 dBFS stereo: balance dB", s.balanceDb, 0.0, 0.1);
         check ("997 Hz -23 dBFS stereo: crest dB (sine = 3.01)", s.crest, 3.01, 0.1);
+        // a mono signal's mid level equals its channel level (-26.0 dB RMS for a -23 dB peak sine), side is silent
+        check ("mono: mid RMS dB equals channel RMS", s.midRms, -26.0, 0.3);
+        check ("mono: side RMS dB is silent", s.sideRms <= -100.0 ? 1.0 : 0.0, 1.0, 0.01);
+    }
+
+    // 1b. Left only: balance reads LEFT (negative), correlation 0, mid and side both 6 dB under the channel level.
+    {
+        MeterBank b; b.prepare (kFs);
+        const double a = dbToLin (-20.0);
+        run (b, 10.0, [&] (long long t, float& l, float& r) { l = (float) (a * std::sin (2.0 * kPi * 997.0 * t / kFs)); r = 0.0f; });
+        const auto s = b.snapshot();
+        check ("left only: balance is negative (left louder)", s.balanceDb < -20.0 ? 1.0 : 0.0, 1.0, 0.01);
+        check ("left only: mid RMS", s.midRms, -29.0, 0.3);
+        check ("left only: side RMS", s.sideRms, -29.0, 0.3);
     }
 
     // 2. Relative gate: 20 s at -23, then 20 s at -60. Integrated must ignore the quiet section.

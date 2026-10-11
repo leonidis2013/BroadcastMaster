@@ -340,6 +340,26 @@ static void testStereoUtils()
     { auto s = make (p); Buf l (100, 0.25f), r (100, 0.25f); s->process (l.data(), r.data(), 100);
       near (l[10], 0.5, 1e-3, "mid gain +6 dB"); }
 
+    // stereo exciter: adds harmonics to the side signal only, never touches the mono sum, off = transparent
+    p = {}; p.excitePct = 0.0f;
+    { auto s = make (p); Buf l = sine (1000, 0.3, 9600), r = sine (1300, 0.2, 9600), l0 = l, r0 = r;
+      s->process (l.data(), r.data(), 9600);
+      double d = 0; for (int i = 0; i < 9600; ++i) d = std::max (d, (double) std::fabs (l[(size_t) i] - l0[(size_t) i]));
+      CHECK (d < 1e-7, "exciter at 0 is transparent %g", d); }
+    p = {}; p.excitePct = 100.0f; p.exciteHz = 3000.0f;
+    { auto s = make (p); Buf l = sine (5000, 0.15, 9600), r = l;
+      for (auto& v : r) v = -v;   // pure side signal
+      Buf l0 = l, r0 = r;
+      s->process (l.data(), r.data(), 9600);
+      double sumDiff = 0, sideDiff = 0;
+      for (int i = 4800; i < 9600; ++i)
+      {
+          sumDiff = std::max (sumDiff, (double) std::fabs ((l[(size_t) i] + r[(size_t) i]) - (l0[(size_t) i] + r0[(size_t) i])));
+          sideDiff = std::max (sideDiff, (double) std::fabs ((l[(size_t) i] - r[(size_t) i]) - (l0[(size_t) i] - r0[(size_t) i])));
+      }
+      CHECK (sumDiff < 1e-5, "exciter leaves the mono sum alone %g", sumDiff);
+      CHECK (sideDiff > 1e-3, "exciter changes the side signal %g", sideDiff); }
+
     p = {}; p.delayMs = 10.0f;
     { auto s = make (p); Buf l (4800, 0.0f), r (4800, 0.0f); l[0] = 1.0f;
       // the delay change fades in over 20 ms, so warm up with the setting before measuring

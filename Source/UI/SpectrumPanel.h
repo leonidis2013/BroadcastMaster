@@ -19,7 +19,7 @@ public:
         bpo = bandsPerOctave;
     }
 
-    // Draws the tonal EQ curve (mid and side) over the analyser while the EQ stage is selected.
+    // Draws the tonal EQ curve (mid and side) and one draggable numbered marker per band over the analyser while the EQ stage is selected.
     void setEqOverlay (bool show, const bm::dsp::EqParams& params)
     {
         showEq = show;
@@ -34,6 +34,13 @@ public:
 
     void mouseMove (const juce::MouseEvent& e) override
     {
+        if (showEq)
+        {
+            const int h = hitEqNode (e.position);
+            setMouseCursor (h >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            if (h != eqHover) { eqHover = h; repaint(); }
+            return;
+        }
         if (! showMbc) return;
         const auto h = mbcHit (e.position);
         setMouseCursor (h.kind == 1 ? juce::MouseCursor::LeftRightResizeCursor
@@ -41,10 +48,23 @@ public:
         if (h.kind != hover.kind || h.idx != hover.idx) { hover = h; repaint(); }
     }
 
-    void mouseExit (const juce::MouseEvent&) override { hover = {}; }
+    void mouseExit (const juce::MouseEvent&) override { hover = {}; eqHover = -1; }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (showEq)
+        {
+            eqDragBand = hitEqNode (e.position);
+            if (eqDragBand >= 0)
+            {
+                proc.apvts.state.setProperty ("eqBand", eqDragBand, nullptr);
+                eqFreqParam = proc.apvts.getParameter (bm::params::eqId (eqDragBand, "freq"));
+                eqGainParam = proc.apvts.getParameter (bm::params::eqId (eqDragBand, "gain"));
+                if (eqFreqParam) eqFreqParam->beginChangeGesture();
+                if (eqGainParam) eqGainParam->beginChangeGesture();
+            }
+            return;
+        }
         if (! showMbc || ! plotRect().contains (e.position)) return;
         const auto h = mbcHit (e.position);
         if (h.band >= 0) proc.apvts.state.setProperty ("mbcBand", h.band, nullptr);
@@ -58,6 +78,14 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
+        if (showEq)
+        {
+            if (eqDragBand < 0) return;
+            const auto r = plotRect();
+            if (eqFreqParam) eqFreqParam->setValueNotifyingHost (eqFreqParam->convertTo0to1 (freqForX (e.position.x, r)));
+            if (eqGainParam) eqGainParam->setValueNotifyingHost (eqGainParam->convertTo0to1 (juce::jlimit (-12.0f, 12.0f, eqDbForY (e.position.y, r))));
+            return;
+        }
         if (! showMbc || dragParam == nullptr) return;
         const auto r = plotRect();
         if (dragKind == 1)
@@ -78,12 +106,23 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (eqFreqParam) eqFreqParam->endChangeGesture();
+        if (eqGainParam) eqGainParam->endChangeGesture();
+        eqFreqParam = eqGainParam = nullptr; eqDragBand = -1;
         if (dragParam != nullptr) dragParam->endChangeGesture();
         dragParam = nullptr; dragKind = 0;
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
+        if (showEq)
+        {
+            const int b = hitEqNode (e.position);   // double-click a marker: back to 0 dB
+            if (b >= 0)
+                if (auto* prm = proc.apvts.getParameter (bm::params::eqId (b, "gain")))
+                { prm->beginChangeGesture(); prm->setValueNotifyingHost (prm->convertTo0to1 (0.0f)); prm->endChangeGesture(); }
+            return;
+        }
         if (! showMbc) return;
         const auto h = mbcHit (e.position);
         const juce::String id = h.kind == 1 ? juce::String ("mb_x") + juce::String (h.idx + 1)
@@ -276,6 +315,7 @@ private:
         }
         if (showEq) paintEqCurve (g, r);
         g.restoreState();
+        if (showEq) paintEqNodes (g, r);
     }
 
     // ---- multiband compressor graph -------------------------------------------------------------------
@@ -302,6 +342,62 @@ private:
         if (h.band >= 0 && std::fabs (pt.y - yForMbc (param (bm::params::mbId (h.band, "thr")), r)) < 9.0f)
         { h.kind = 2; h.idx = h.band; }
         return h;
+    }
+
+    // Tonal EQ scale: 0 dB at the middle of the analyser, +/-12 dB to either side.
+    static float yForEq (float db, juce::Rectangle<float> r) { return r.getCentreY() - juce::jlimit (-14.0f, 14.0f, db) / 12.0f * r.getHeight() * 0.36f; }
+    static float eqDbForY (float y, juce::Rectangle<float> r) { return (r.getCentreY() - y) / (r.getHeight() * 0.36f) * 12.0f; }
+    float freqForX (float x, juce::Rectangle<float> r) const { return (float) (20.0 * std::pow (1000.0, juce::jlimit (0.0, 1.0, (double) ((x - r.getX()) / r.getWidth())))); }
+    int selectedEqBand() const { return juce::jlimit (0, bm::dsp::EqParams::kBands - 1, (int) proc.apvts.state.getProperty ("eqBand", 0)); }
+
+    juce::Point<float> eqNodePos (int b, juce::Rectangle<float> r) const
+    {
+        const auto& bd = eqParams.band[b];
+        return { xForFreq (bd.freq, r), yForEq (bd.gainDb, r) };
+    }
+
+    int hitEqNode (juce::Point<float> pt) const
+    {
+        const auto r = plotRect();
+        int best = -1; float bestD = 12.0f;
+        for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
+        {
+            const float d = eqNodePos (b, r).getDistanceFrom (pt);
+            if (d < bestD) { bestD = d; best = b; }
+        }
+        return best;
+    }
+
+    // One numbered marker per band, sitting at the band's frequency and gain. Drag it to change both.
+    void paintEqNodes (juce::Graphics& g, juce::Rectangle<float> r) const
+    {
+        const auto& p = pal();
+        const int sel = selectedEqBand();
+        for (int b = 0; b < bm::dsp::EqParams::kBands; ++b)
+        {
+            const bool on = eqParams.band[b].on;
+            const auto pos = eqNodePos (b, r);
+            const auto col = p.eqCol[b];
+            const bool hot = b == eqHover || b == eqDragBand;
+            const float rad = (b == sel ? 9.5f : 8.0f) + (hot ? 1.0f : 0.0f);
+            // a faint line down to the frequency axis shows exactly where the band sits
+            g.setColour (col.withAlpha (on ? 0.35f : 0.12f));
+            g.drawVerticalLine ((int) pos.x, r.getY(), r.getBottom());
+            g.setColour (on ? col.withAlpha (0.28f) : p.panel);
+            g.fillEllipse (pos.x - rad, pos.y - rad, rad * 2.0f, rad * 2.0f);
+            g.setColour (on ? col : p.textDim);
+            g.drawEllipse (pos.x - rad, pos.y - rad, rad * 2.0f, rad * 2.0f, b == sel ? 2.0f : 1.3f);
+            g.setFont (font (10.5f, true));
+            g.drawText (juce::String (b + 1), juce::Rectangle<float> (pos.x - rad, pos.y - rad, rad * 2.0f, rad * 2.0f), juce::Justification::centred);
+            if (b == sel || hot)
+            {
+                g.setColour (p.text);
+                g.setFont (monoFont (10.0f, true));
+                const float tx = juce::jlimit (r.getX() + 2.0f, r.getRight() - 112.0f, pos.x + rad + 4.0f);
+                g.drawText (hzText (eqParams.band[b].freq) + "  " + signedText (eqParams.band[b].gainDb, 1) + " dB",
+                            juce::Rectangle<float> (tx, pos.y - 7.0f, 110.0f, 14.0f), juce::Justification::centredLeft);
+            }
+        }
     }
 
     static juce::String hzText (double f) { return f >= 1000.0 ? juce::String (f / 1000.0, f >= 10000.0 ? 1 : 2) + " kHz" : juce::String ((int) std::lround (f)) + " Hz"; }
@@ -436,7 +532,7 @@ private:
         const auto& p = pal();
         const double fs = juce::jmax (8000.0, proc.getCurrentSampleRate());
         const auto chains = bm::dsp::EqChains::build (eqParams, fs);
-        auto yEq = [&] (double db) { return r.getCentreY() - (float) (juce::jlimit (-14.0, 14.0, db) / 12.0) * r.getHeight() * 0.36f; };
+        auto yEq = [&] (double db) { return yForEq ((float) db, r); };
 
         g.setColour (p.accent.withAlpha (0.35f));
         g.drawHorizontalLine ((int) r.getCentreY(), r.getX(), r.getRight());
@@ -521,7 +617,7 @@ private:
 
         g.setColour (p.textDim);
         g.setFont (font (10.0f));
-        const double marks[] = { 100, 1000, 10000 };
+        const double marks[] = { 20, 100, 1000, 10000, 20000 };
         for (double f : marks)
         {
             const float y = (float) r.getY() + (float) h * (1.0f - (float) (std::log (f / 20.0) / std::log (1000.0)));
@@ -539,6 +635,8 @@ private:
     double lastFs = 0.0;
     bool showOther = false, showingOutput = true, showEq = false, showMbc = false;
     MbcHit hover;
+    int eqHover = -1, eqDragBand = -1;
+    juce::RangedAudioParameter *eqFreqParam = nullptr, *eqGainParam = nullptr;
     int dragKind = 0, dragIdx = -1;
     juce::RangedAudioParameter* dragParam = nullptr;
     bm::dsp::EqParams eqParams;

@@ -88,6 +88,8 @@ public:
         float midGainDb = 0.0f, sideGainDb = 0.0f;
         bool flipL = false, flipR = false, mono = false;
         float delayMs = 0.0f;      // 0 to 500
+        float excitePct = 0.0f;    // stereo exciter: harmonics added to the side signal above exciteHz
+        float exciteHz = 4000.0f;
     };
 
     void prepare (double sampleRate)
@@ -98,11 +100,22 @@ public:
         writePos = 0;
         curDelay = targetDelay = 0;
         fadePos = fadeLen = 0;
+        exHp1.reset(); exHp2.reset(); exXp = 0.0f;
+        lastExHz = -1.0f;
     }
 
     void setParams (const Params& p)
     {
         params = p;
+        exGain = std::clamp (p.excitePct, 0.0f, 100.0f) * 0.01f * 0.5f;
+        const float hz = std::clamp (p.exciteHz, 1500.0f, 12000.0f);
+        if (hz != lastExHz)
+        {
+            lastExHz = hz;
+            const Coef h = highpass (fs, hz, 0.7071);
+            h.applyTo (exHp1); h.applyTo (exHp2);
+        }
+        if (exGain <= 0.0f) { exHp1.reset(); exHp2.reset(); exXp = 0.0f; }
         const int d = (int) std::lround (std::clamp (p.delayMs, 0.0f, 500.0f) * 0.001 * fs);
         if (d != targetDelay)
         {
@@ -133,6 +146,18 @@ public:
                 b = m - s;
             }
 
+            if (exGain > 0.0f && ! params.mono)
+            {
+                // stereo exciter: saturate the high-passed side signal and add the harmonics back to it
+                const float side = (a - b) * 0.5f;
+                const float hp = (float) exHp1.process (side) * 4.0f;
+                const float y = adaa1 (hp, exXp, [] (float v) { return std::tanh (v + 0.2f) - 0.19738f; },
+                                       [] (float v) { return logCosh ((double) v + 0.2) - (double) v * 0.19738; });
+                const float add = exGain * (float) exHp2.process (y) * 0.25f;
+                a += add;
+                b -= add;
+            }
+
             delayBuf[0][writePos] = a;
             delayBuf[1][writePos] = b;
             float oa, ob;
@@ -146,6 +171,8 @@ public:
     int currentDelaySamples() const noexcept { return targetDelay; }
 
 private:
+    bm::Biquad exHp1, exHp2;
+    float exXp = 0.0f, exGain = 0.0f, lastExHz = -1.0f;
     int curDelayAtFade() const noexcept
     {
         if (fadeLen <= 0 || fadePos >= fadeLen) return targetDelay;

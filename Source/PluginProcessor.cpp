@@ -83,6 +83,7 @@ BroadcastMasterProcessor::BroadcastMasterProcessor()
     ptr.lvTarget = P ("lv_target"); ptr.lvRange = P ("lv_range"); ptr.lvSpeed = P ("lv_speed"); ptr.lvGate = P ("lv_gate"); ptr.lvMode = P ("lv_mode");
     ptr.stWidth = P ("st_width"); ptr.stMid = P ("st_mid"); ptr.stSide = P ("st_side"); ptr.stFlipL = P ("st_flipl");
     ptr.stFlipR = P ("st_flipr"); ptr.stMono = P ("st_mono"); ptr.stDelay = P ("st_delay");
+    ptr.stExc = P ("st_exc"); ptr.stExcF = P ("st_exc_f");
     ptr.clThr = P ("cl_thr"); ptr.clKnee = P ("cl_knee"); ptr.lmRel = P ("lm_rel");
 
     for (auto* id : { loudPreset, customTarget, customCeiling, presetLink })
@@ -183,6 +184,8 @@ void BroadcastMasterProcessor::readParams (bm::dsp::ChainParams& c) const
     c.stereo.flipR = ptr.stFlipR->load() > 0.5f;
     c.stereo.mono = ptr.stMono->load() > 0.5f;
     c.stereo.delayMs = ptr.stDelay->load();
+    c.stereo.excitePct = ptr.stExc->load();
+    c.stereo.exciteHz = ptr.stExcF->load();
 
     c.clipThreshold = ptr.clThr->load();
     c.clipKnee = ptr.clKnee->load();
