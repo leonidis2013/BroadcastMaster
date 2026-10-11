@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.3.0** (adds the stereo exciter, EQ band markers and church presets)
+**Version 0.4.0** (smarter auto-leveler that holds through pauses and follows talk-to-music changes, much lower CPU load)
 
 ## The signal chain
 
@@ -96,6 +96,14 @@ Each release also holds `BroadcastMaster-Windows-VST3.zip` and `BroadcastMaster-
   ```
 
   (Use `sudo` and the `/Library/...` path for the system-wide folder.) If macOS still blocks it, choose "Open Anyway" in System Settings > Privacy & Security.
+
+## CPU load
+
+Measured on one core at 48 kHz stereo: about 1.4 % with the shipped defaults, about 2.7 % in Broadcast mode with every stage on. To keep it as low as possible:
+
+- Stages you switch off cost almost nothing, and switching never changes latency. The heaviest stages are the multiband compressor and the stereo exciter; the rest are light.
+- Live latency mode is the choice for monitoring (71 samples); Broadcast mode adds the linear-phase EQ delay and costs about the same CPU.
+- The editor only works while its window is open, so closing the plug-in window in the host lowers the load further.
 
 ## Keys
 

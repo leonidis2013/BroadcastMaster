@@ -94,6 +94,7 @@ struct KernelSpectrum
 struct KernelPair
 {
     KernelSpectrum mid, side;
+    bool flat = false;   // pure delay (no EQ): the convolver then copies samples instead of running FFTs
 };
 
 inline constexpr int kFftN = 4096;        // convolver FFT size
@@ -145,6 +146,7 @@ inline void designKernels (const EqParams& p, double fs, KernelPair& out, const 
     const EqChains c = EqChains::build (p, fs);
     designKernel (c.mid, c.nMid, fs, out.mid, fft);
     designKernel (c.side, c.nSide, fs, out.side, fft);
+    out.flat = c.nMid == 0 && c.nSide == 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -165,6 +167,7 @@ public:
         xRe.assign ((size_t) kFftN, 0.0f);
         xIm.assign ((size_t) kFftN, 0.0f);
         oldBlock.assign ((size_t) kHop, 0.0f);
+        oldBlock2.assign ((size_t) kHop, 0.0f);
         setFlat();
     }
 
@@ -195,6 +198,7 @@ public:
             fft.forward (h.data(), k->im.data());
             k->re = h;
         }
+        flat.flat = true;
         setKernels (flat, true);
     }
 
@@ -230,57 +234,74 @@ public:
     }
 
 private:
+    // One hop for both channels. Mid and side are real signals, so they share ONE complex FFT (mid in the real
+    // part, side in the imaginary part) and one inverse FFT. A flat kernel (EQ off or neutral) needs no FFT at all:
+    // the output is just the input delayed by kCentre samples.
     void runHop() noexcept
     {
-        const KernelSpectrum* kc[2] { &cur.mid, &cur.side };
-        const KernelSpectrum* kp[2] { &prev.mid, &prev.side };
-
         for (int c = 0; c < 2; ++c)
         {
             auto& buf = inBuf[c];
             std::memmove (buf.data(), buf.data() + kHop, (size_t) (kFftN - kHop) * sizeof (float));
             std::memcpy (buf.data() + kFftN - kHop, acc[c].data(), (size_t) kHop * sizeof (float));
+        }
 
-            std::memcpy (xRe.data(), buf.data(), (size_t) kFftN * sizeof (float));
-            std::fill (xIm.begin(), xIm.end(), 0.0f);
+        if (! cur.flat || (fading && ! prev.flat))
+        {
+            std::memcpy (xRe.data(), inBuf[0].data(), (size_t) kFftN * sizeof (float));
+            std::memcpy (xIm.data(), inBuf[1].data(), (size_t) kFftN * sizeof (float));
             fft.forward (xRe.data(), xIm.data());
+        }
 
-            convolveSpectrum (*kc[c], outBlock[c].data());
-            if (fading)
+        block (cur, outBlock[0].data(), outBlock[1].data());
+        if (fading)
+        {
+            block (prev, oldBlock.data(), oldBlock2.data());
+            for (int i = 0; i < kHop; ++i)
             {
-                std::vector<float>& o = oldBlock;
-                convolveSpectrum (*kp[c], o.data());
-                for (int i = 0; i < kHop; ++i)
-                {
-                    const float g = (float) (i + 1) / (float) kHop;
-                    outBlock[c][(size_t) i] = o[(size_t) i] + (outBlock[c][(size_t) i] - o[(size_t) i]) * g;
-                }
+                const float g = (float) (i + 1) / (float) kHop;
+                outBlock[0][(size_t) i] = oldBlock[(size_t) i] + (outBlock[0][(size_t) i] - oldBlock[(size_t) i]) * g;
+                outBlock[1][(size_t) i] = oldBlock2[(size_t) i] + (outBlock[1][(size_t) i] - oldBlock2[(size_t) i]) * g;
             }
         }
         fading = false;
     }
 
-    // Multiplies the stored input spectrum by a kernel, inverse transforms and keeps the valid last kHop samples.
-    void convolveSpectrum (const KernelSpectrum& k, float* dst) noexcept
+    void block (const KernelPair& k, float* dstM, float* dstS) noexcept
     {
+        if (k.flat)
+        {
+            std::memcpy (dstM, inBuf[0].data() + (kFftN - kHop - kCentre), (size_t) kHop * sizeof (float));
+            std::memcpy (dstS, inBuf[1].data() + (kFftN - kHop - kCentre), (size_t) kHop * sizeof (float));
+            return;
+        }
+
+        const float *kmr = k.mid.re.data(), *kmi = k.mid.im.data(), *ksr = k.side.re.data(), *ksi = k.side.im.data();
         for (int i = 0; i < kFftN; ++i)
         {
-            const float a = xRe[(size_t) i], b = xIm[(size_t) i];
-            const float c = k.re[(size_t) i], d = k.im[(size_t) i];
-            scratchRe[(size_t) i] = a * c - b * d;
-            scratchIm[(size_t) i] = -(a * d + b * c); // conjugate, so a forward FFT acts as the inverse
+            const int j = (kFftN - i) & (kFftN - 1);
+            const float ar = xRe[(size_t) i], ai = xIm[(size_t) i], br = xRe[(size_t) j], bi = xIm[(size_t) j];
+            const float mr = 0.5f * (ar + br), mi = 0.5f * (ai - bi);     // spectrum of the mid input
+            const float sr = 0.5f * (ai + bi), si = -0.5f * (ar - br);    // spectrum of the side input
+            const float ymr = mr * kmr[i] - mi * kmi[i], ymi = mr * kmi[i] + mi * kmr[i];
+            const float ysr = sr * ksr[i] - si * ksi[i], ysi = sr * ksi[i] + si * ksr[i];
+            scratchRe[(size_t) i] = ymr - ysi;                            // Y = Ymid + i * Yside
+            scratchIm[(size_t) i] = -(ymi + ysr);                         // conjugate: a forward FFT then acts as the inverse
         }
         fft.forward (scratchRe.data(), scratchIm.data());
         const float inv = 1.0f / (float) kFftN;
         for (int i = 0; i < kHop; ++i)
-            dst[i] = scratchRe[(size_t) (kFftN - kHop + i)] * inv;
+        {
+            dstM[i] = scratchRe[(size_t) (kFftN - kHop + i)] * inv;
+            dstS[i] = -scratchIm[(size_t) (kFftN - kHop + i)] * inv;
+        }
     }
 
     bm::Fft fft;
     KernelPair cur, prev;
     bool haveKernels = false, fading = false;
     std::vector<float> inBuf[2], acc[2], outBlock[2];
-    std::vector<float> scratchRe, scratchIm, xRe, xIm, oldBlock;
+    std::vector<float> scratchRe, scratchIm, xRe, xIm, oldBlock, oldBlock2;
     int accCount = 0;
 };
 

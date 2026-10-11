@@ -36,9 +36,9 @@ public:
             float p = 0.0f;
             for (int ch = 0; ch < 2; ++ch)
             {
-                hist[ch][pos] = xs[ch];
+                hist[ch][pos] = hist[ch][pos + TpFilter::kHistLen] = xs[ch];   // mirrored, so the window below is contiguous
                 holdSp = std::max (holdSp, std::fabs (xs[ch]));
-                p = std::max (p, filter.peak (hist[ch], pos));
+                p = std::max (p, filter.peakWindow (hist[ch] + (pos - filter.windowLen() + 1 + TpFilter::kHistLen)));
             }
             pos = (pos + 1) & TpFilter::kHistMask;
 
@@ -91,7 +91,7 @@ private:
     int subBlockLen = 4800, sbCount = 0, ringPos = 0, pos = 0;
     double releaseCoeff = 0.99999;
     float sbMax = 0.0f, recent = 0.0f, holdTp = 0.0f, holdSp = 0.0f;
-    float hist[2][TpFilter::kHistLen] {};
+    float hist[2][2 * TpFilter::kHistLen] {};
     float ring[kRing] {};
 
     std::atomic<bool> resetRequested { false };

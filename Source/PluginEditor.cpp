@@ -50,7 +50,7 @@ BroadcastMasterEditor::BroadcastMasterEditor (BroadcastMasterProcessor& p)
     setResizeLimits (1100, 860, 1900, 1400);
     setSize (1240, 1020);
 
-    startTimerHz (30);
+    startTimerHz (20);
 }
 
 BroadcastMasterEditor::~BroadcastMasterEditor()
@@ -120,6 +120,8 @@ bool BroadcastMasterEditor::keyPressed (const juce::KeyPress& key)
 
 void BroadcastMasterEditor::timerCallback()
 {
+    if (! isShowing()) return; // hidden editor (host window closed or tab inactive): no work
+
     // Follow host automation / state changes for the theme and the source switch.
     const int themeNow = param (bm::params::theme) < 0.5f ? 0 : 1;
     if (themeNow != appliedTheme)

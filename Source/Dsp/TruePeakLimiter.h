@@ -21,10 +21,13 @@ public:
         fs = sampleRate;
         filter.prepare (fs, kSpan);
         maxLook = std::max (8, (int) (0.012 * fs) + 8);
-        const size_t cap = (size_t) (maxLook + filter.delay() + 16);
+        size_t cap = 64;                                   // powers of two, so wrapping is a mask instead of a division
+        while (cap < (size_t) (maxLook + filter.delay() + 16)) cap <<= 1;
         for (auto& d : delayBuf) d.assign (cap, 0.0f);
-        dqIdx.assign ((size_t) maxLook + 2, 0);
-        dqVal.assign ((size_t) maxLook + 2, 1.0f);
+        size_t qc = 16;
+        while (qc < (size_t) maxLook + 2) qc <<= 1;
+        dqIdx.assign (qc, 0);
+        dqVal.assign (qc, 1.0f);
         mRing.assign ((size_t) maxLook + 2, 1.0f);
         setParams (ceilingDb, releaseMs, lookMs, enabled);
         reset();
@@ -47,6 +50,8 @@ public:
         for (auto& d : delayBuf) std::fill (d.begin(), d.end(), 0.0f);
         for (auto& h : hist) std::fill (std::begin (h), std::end (h), 0.0f);
         histPos = 0;
+        winMax = 0.0f; winAge = 0;
+        std::fill (std::begin (absRing), std::end (absRing), 0.0f);
         wp = 0;
         t = 0;
         head = tail = 0;
@@ -68,37 +73,63 @@ public:
         float minEnv = 1.0f;
         float* io[2] { l, r };
 
+        const size_t cmask = cap - 1, qmask = qCap() - 1;
+        const int span = kSpan;                          // window of samples the interpolation looks at: span + 1
+        const float bound = filter.peakBound();
+        const int P = filter.windowLen();
+
         for (int i = 0; i < n; ++i)
         {
-            float tp = 0.0f;
+            float a = 0.0f;
             for (int c = 0; c < 2; ++c)
             {
-                hist[c][histPos] = io[c][i];
-                tp = std::max (tp, filter.peak (hist[c], histPos, kHistMask));
-                delayBuf[c][wp] = io[c][i];
+                const float x = io[c][i];
+                hist[c][histPos] = hist[c][histPos + kHistLen] = x;   // mirrored: the window is contiguous
+                delayBuf[c][wp] = x;
+                a = std::max (a, std::fabs (x));
             }
+
+            // running maximum of |sample| over the interpolation window
+            absRing[histPos] = a;
+            if (a >= winMax) { winMax = a; winAge = 0; }
+            else if (++winAge > span)
+            {
+                winMax = 0.0f; winAge = 0;
+                for (int j = 0; j <= span; ++j)
+                {
+                    const float v = absRing[(histPos - j) & kHistMask];
+                    if (v > winMax) { winMax = v; winAge = j; }
+                }
+            }
+
+            // The true peak is only needed when it could reach the ceiling: the interpolated value never exceeds
+            // the loudest sample in the window times `bound`. Quiet passages (and a disabled limiter) skip the filter.
+            float tp = 0.0f;
+            if (enabled && winMax * bound > ceilLin)
+                for (int c = 0; c < 2; ++c)
+                    tp = std::max (tp, filter.peakWindow (hist[c] + (histPos - P + 1 + kHistLen)));
             histPos = (histPos + 1) & kHistMask;
 
             const float req = (enabled && tp > ceilLin) ? ceilLin / tp : 1.0f;
 
             // sliding minimum over the last L requirements (monotonic queue)
-            while (tail > head && dqVal[(size_t) ((tail - 1) % qCap())] >= req) --tail;
-            dqIdx[(size_t) (tail % qCap())] = t;
-            dqVal[(size_t) (tail % qCap())] = req;
+            while (tail > head && dqVal[(size_t) ((tail - 1) & (long long) qmask)] >= req) --tail;
+            dqIdx[(size_t) (tail & (long long) qmask)] = t;
+            dqVal[(size_t) (tail & (long long) qmask)] = req;
             ++tail;
-            while (dqIdx[(size_t) (head % qCap())] <= t - L) ++head;
-            const float m = dqVal[(size_t) (head % qCap())];
+            while (dqIdx[(size_t) (head & (long long) qmask)] <= t - L) ++head;
+            const float m = dqVal[(size_t) (head & (long long) qmask)];
 
             // moving average of the minima over L samples
             sum += (double) m - (double) mRing[(size_t) mPos];
             mRing[(size_t) mPos] = m;
-            mPos = (mPos + 1) % L;
+            if (++mPos >= L) mPos = 0;
             const float G = (float) (sum / (double) L);
 
             env = G <= env ? G : env + (G - env) * (1.0f - relCoef);
             minEnv = std::min (minEnv, env);
 
-            const size_t rp = (wp + cap - (size_t) D) % cap;
+            const size_t rp = (wp + cap - (size_t) D) & cmask;
             for (int c = 0; c < 2; ++c)
             {
                 const float dly = delayBuf[c][rp];
@@ -108,7 +139,7 @@ public:
                 io[c][i] = y;
             }
 
-            wp = (wp + 1) % cap;
+            wp = (wp + 1) & cmask;
             ++t;
         }
 
@@ -129,7 +160,10 @@ private:
 
     std::vector<float> delayBuf[2];
     static constexpr int kSpan = 48, kHistLen = 64, kHistMask = 63; // sharper filter than the meter's: see TpFilter
-    float hist[2][kHistLen] {};
+    float hist[2][2 * kHistLen] {};
+    float absRing[kHistLen] {};
+    float winMax = 0.0f;
+    int winAge = 0;
     int histPos = 0;
     size_t wp = 0;
 

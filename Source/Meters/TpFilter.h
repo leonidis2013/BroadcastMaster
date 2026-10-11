@@ -49,9 +49,57 @@ public:
                 if (idx < N)
                     coef[(size_t) (p * (taps + 1) + k)] = (float) (h[(size_t) idx] * norm);
             }
+
+        // Fast path data: per phase, the taps reversed and zero-padded to a multiple of 4, so a dot product with a
+        // contiguous window (oldest sample first) needs no index masking and runs four sums in parallel.
+        padded = ((taps + 1) + 3) & ~3;
+        coefRev.assign ((size_t) (factor * padded), 0.0f);
+        lipschitz = 0.0f;
+        for (int p = 0; p < factor; ++p)
+        {
+            float l1 = 0.0f;
+            for (int k = 0; k <= taps; ++k)
+            {
+                const float c = coef[(size_t) (p * (taps + 1) + k)];
+                coefRev[(size_t) (p * padded + (padded - 1 - k))] = c;
+                l1 += std::fabs (c);
+            }
+            lipschitz = std::max (lipschitz, l1);
+        }
+        centreCoef = coef[(size_t) (taps / 2)];   // phase 0: only the centre tap is non-zero
     }
 
     int oversampling() const noexcept { return factor; }
+
+    // Number of samples a window passed to peakWindow() must hold (the newest sample last).
+    int windowLen() const noexcept { return padded; }
+
+    // Upper bound on |interpolated value| / max |input sample| over the filter span: if the loudest recent sample
+    // times this is under a ceiling, no inter-sample peak can reach it, so the filter need not run.
+    float peakBound() const noexcept { return factor == 1 ? 1.0f : lipschitz; }
+
+    // Same result as peak(), from a contiguous window of windowLen() samples with the newest last.
+    float peakWindow (const float* w) const noexcept
+    {
+        if (factor == 1)
+            return std::fabs (w[padded - 1]);
+
+        float best = std::fabs (centreCoef * w[padded - 1 - taps / 2]);   // phase 0 = the sample itself
+        for (int p = 1; p < factor; ++p)
+        {
+            const float* cf = coefRev.data() + p * padded;
+            float a0 = 0.0f, a1 = 0.0f, a2 = 0.0f, a3 = 0.0f;
+            for (int j = 0; j < padded; j += 4)
+            {
+                a0 += cf[j] * w[j];
+                a1 += cf[j + 1] * w[j + 1];
+                a2 += cf[j + 2] * w[j + 2];
+                a3 += cf[j + 3] * w[j + 3];
+            }
+            best = std::max (best, std::fabs ((a0 + a1) + (a2 + a3)));
+        }
+        return best;
+    }
 
     // Samples between an input sample arriving and its peak estimate being available.
     int delay() const noexcept { return factor == 1 ? 0 : taps / 2; }
@@ -89,7 +137,8 @@ private:
         return sum;
     }
 
-    int factor = 4, taps = kTaps;
-    std::vector<float> coef;
+    int factor = 4, taps = kTaps, padded = 16;
+    float lipschitz = 2.0f, centreCoef = 1.0f;
+    std::vector<float> coef, coefRev;
 };
 } // namespace bm

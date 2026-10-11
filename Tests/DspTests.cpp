@@ -299,6 +299,42 @@ static void testLeveler()
         runChunks (l, r, 480, [&] (float* a, float* b, int n) { lv.process (a, b, n); });
         CHECK (lv.gainDb() <= 6.01f, "range limit holds %g", lv.gainDb());
     }
+    // pauses: a talker at a steady level with 1.5 s breaks. The gain must hold through the pause and not creep up.
+    {
+        AutoLeveler lv; lv.prepare (FS);
+        LevParams p; p.targetLufs = -20.0f; p.rangeDb = 12.0f; p.mode = LevMode::Auto; p.speed = LevSpeed::Medium;
+        lv.setParams (p);
+        auto talk = [&] (double sec, double dbfs, unsigned seed)
+        {
+            Buf l = shapedNoise ((int) (FS * sec), true, seed, dbfs), r = l;
+            runChunks (l, r, 480, [&] (float* a, float* b, int n) { lv.process (a, b, n); });
+        };
+        auto pause = [&] (double sec)
+        {
+            Buf l ((size_t) (FS * sec), 0.0f), r = l;
+            runChunks (l, r, 480, [&] (float* a, float* b, int n) { lv.process (a, b, n); });
+        };
+        talk (20, -34, 5);
+        const float gTalk = lv.gainDb();
+        pause (4.0);
+        near (lv.gainDb(), gTalk, 0.3, "gain holds through a 4 s pause");
+        talk (6, -34, 6);
+        near (lv.gainDb(), gTalk, 1.5, "gain after the pause is where it was");
+    }
+    // talk to a much louder service: the output must reach the target region within a few seconds
+    {
+        AutoLeveler lv; lv.prepare (FS);
+        LevParams p; p.targetLufs = -20.0f; p.rangeDb = 12.0f; p.mode = LevMode::Auto; p.speed = LevSpeed::Medium;
+        lv.setParams (p);
+        Buf a = shapedNoise ((int) (FS * 15), true, 7, -38), ar = a;
+        runChunks (a, ar, 480, [&] (float* x, float* y, int n) { lv.process (x, y, n); });
+        const float gTalk = lv.gainDb();
+        CHECK (gTalk > 3.0f, "talk is lifted %g", gTalk);
+        Buf m = shapedNoise ((int) (FS * 6), false, 8, -22), mr = m; // music-like: continuous, 16 dB louder
+        runChunks (m, mr, 480, [&] (float* x, float* y, int n) { lv.process (x, y, n); });
+        CHECK (lv.gainDb() < gTalk - 6.0f, "gain comes down for loud music %g -> %g", gTalk, lv.gainDb());
+        near (lv.levelLufs() + lv.gainDb(), -20.0, 3.0, "loud music lands near target within 6 s");
+    }
     // speech vs music classification
     {
         AutoLeveler a, b; a.prepare (FS); b.prepare (FS);
