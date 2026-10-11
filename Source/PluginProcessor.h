@@ -55,6 +55,8 @@ public:
     float mbcBandLevel (int band) const noexcept { return chain.mbc.levelDb (band); }
     float levelerGainDb() const noexcept     { return chain.lev.gainDb(); }
     float levelerSpeech() const noexcept     { return chain.lev.speechAmount(); }
+    float levelerLevelLufs() const noexcept  { return chain.lev.levelLufs(); }
+    bool  levelerRiding() const noexcept     { return chain.lev.riding(); }
     float bypassMatchOffsetDb() const noexcept { return chain.matchOffsetDb(); }
 
     // True when the host has the second (solo) output connected.

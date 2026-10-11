@@ -41,7 +41,7 @@ public:
     {
         kw[0].reset(); kw[1].reset();
         acc = 0.0; hopCount = 0;
-        smoothE = fastE = activeE = midE = 0.0; frames = 0; quietFrames = 0; boost = 0; activeValid = false;
+        smoothE = fastE = activeE = midE = refE = 0.0; frames = 0; refValid = false; quietFrames = 0; boost = 0; catchUp = 0; activeValid = false;
         gainDbNow = 0.0f;
         gStart = gEnd = 1.0f;
         std::fill (std::begin (frameRms), std::end (frameRms), 0.0f);
@@ -75,9 +75,11 @@ public:
     float gainDb() const noexcept       { return gainDbOut.load (std::memory_order_relaxed); }
     float speechAmount() const noexcept { return speechOut.load (std::memory_order_relaxed); } // 0 music .. 1 speech
     float levelLufs() const noexcept    { return levelOut.load (std::memory_order_relaxed); }
+    bool  riding() const noexcept       { return ridingOut.load (std::memory_order_relaxed); } // false while holding through a pause
 
 private:
     static constexpr int kRing = 100; // 1 s of 10 ms frames
+    static constexpr float kDipAllowanceDb = 6.0f;
 
     static float toDb (double e) noexcept { return e > 1.0e-12 ? (float) (-0.691 + 10.0 * std::log10 (e)) : -120.0f; }
 
@@ -87,7 +89,7 @@ private:
         auto coef = [&] (double tau) { return std::exp (-hopSec / tau); };
 
         // short smoothers: about 40 ms decides "is someone talking right now", about 100 ms is the peak guard
-        const double aS = coef (0.04), aF = coef (0.1);
+        const double aS = coef (0.04), aF = coef (0.05);
         smoothE = frames == 0 ? frameEnergy : aS * smoothE + (1.0 - aS) * frameEnergy;
         fastE   = frames == 0 ? frameEnergy : aF * fastE   + (1.0 - aF) * frameEnergy;
         ++frames;
@@ -113,6 +115,7 @@ private:
                 if (! activeValid || smoothDb < toDb (activeE) - 15.0f || quietFrames > 200)
                 {
                     activeE = midE = smoothE;
+                    if (quietFrames > 1000) refValid = false; // a whole new programme after a long silence
                     boost = 40;
                 }
                 activeValid = true;
@@ -127,6 +130,11 @@ private:
             if (boost > 0) --boost;
             const double aA = coef (tau);
             activeE = aA * activeE + (1.0 - aA) * frameEnergy;
+            // slow reference ("where the programme has been for the last several seconds"), used to tell a
+            // passing dip or fade from a lasting change of level
+            const double aR = coef (8.0);
+            refE = refValid ? aR * refE + (1.0 - aR) * frameEnergy : activeE;
+            refValid = true;
         }
         else
             ++quietFrames;
@@ -156,7 +164,7 @@ private:
         // gain riding
         const float p = params.mode == LevMode::Speech ? 1.0f : (params.mode == LevMode::Music ? 0.0f : speech);
         const float scale = 0.5f + 0.5f * p;
-        const float rangeEff = params.rangeDb * (0.75f + 0.25f * p);
+        const float rangeEff = params.rangeDb; (void) p;
 
         float up, down;
         switch (params.speed)
@@ -169,16 +177,35 @@ private:
         float step = 0.0f;
         if (active)
         {
-            // loud bursts (a speaker peaking) count a little ahead of the slow average
-            const float seen = std::max (level, fastDb - 4.0f);
-            const float desired = std::clamp (params.targetLufs - seen, -rangeEff, rangeEff);
+            // A real jump up in level (the music comes back after a quiet passage, a speaker leans into the mic) is
+            // seen right away, ahead of the slow average, so the gain that was raised for the quiet part is taken
+            // back at once instead of blasting the output for a second or two.
+            const bool jump = fastDb > level + 8.0f;
+            // for the next 0.3 s the running level follows the quick one upward, so the gain does not climb again
+            if (jump) catchUp = 30;
+            if (catchUp > 0) { --catchUp; if (fastE > activeE) activeE = midE = fastE; }
+            const float seen = std::max (jump ? fastDb : level, toDb (activeE));
+            float desired = std::clamp (params.targetLufs - seen, -rangeEff, rangeEff);
+            // A dip or fade well below where the programme has been is only lifted so far (the allowance); if the
+            // quiet part lasts, the reference follows it down within about ten seconds and the lift completes.
+            const float refDb = toDb (refE);
+            if (seen < refDb - 6.0f)
+                desired = std::min (desired, std::clamp (params.targetLufs - refDb, -rangeEff, rangeEff) + kDipAllowanceDb);
             const float err = desired - gainDbNow;
-            const float boostRate = std::clamp (1.0f + std::fabs (err) / 4.0f, 1.0f, 3.0f); // far from target: hurry
-            const bool over = fastDb + gainDbNow > params.targetLufs + 2.5f;                  // output running hot
+            const float startUp = frames < 300 ? 3.0f : 1.0f;          // settle quickly when first started
             if (err > 0.0f)
-                step = std::min (err, up * scale * boostRate * (float) hopSec);
+            {
+                // raising the gain is always gentle: lifting a quiet passage too fast just pumps it up
+                step = std::min (err, up * scale * startUp * (float) hopSec);
+            }
             else
-                step = std::max (err, -down * scale * boostRate * (over ? 2.5f : 1.0f) * (float) hopSec);
+            {
+                const float hurry = std::clamp (1.0f + std::fabs (err) / 4.0f, 1.0f, 3.0f);
+                float rate = down * scale * hurry;
+                const float over = fastDb + gainDbNow - params.targetLufs;      // output running hot
+                if (over > 1.5f) rate = std::max (rate, 20.0f * over);          // 3 dB over: 60 dB/s
+                step = std::max (err, -rate * (float) hopSec);
+            }
         }
         else
         {
@@ -186,19 +213,21 @@ private:
             step = std::clamp (gainDbNow, -rangeEff, rangeEff) - gainDbNow;
         }
         gainDbNow += step;
+        ridingOut.store (active, std::memory_order_relaxed);
         gainDbOut.store (gainDbNow, std::memory_order_relaxed);
 
         gStart = gEnd;
         gEnd = dbToLin (gainDbNow);
     }
 
-    double fs = 48000.0, acc = 0.0, smoothE = 0.0, fastE = 0.0, activeE = 0.0, midE = 0.0;
-    int hopLen = 480, hopCount = 0, frames = 0, ringPos = 0, ringFilled = 0, quietFrames = 0, boost = 0;
-    bool activeValid = false;
+    double fs = 48000.0, acc = 0.0, smoothE = 0.0, fastE = 0.0, activeE = 0.0, midE = 0.0, refE = 0.0;
+    int hopLen = 480, hopCount = 0, frames = 0, ringPos = 0, ringFilled = 0, quietFrames = 0, boost = 0, catchUp = 0;
+    bool activeValid = false, refValid = false;
     float gainDbNow = 0.0f, gStart = 1.0f, gEnd = 1.0f, speech = 0.0f;
     float frameRms[kRing] {};
     bm::KWeighting kw[2];
     LevParams params;
     std::atomic<float> gainDbOut { 0.0f }, speechOut { 0.0f }, levelOut { -120.0f };
+    std::atomic<bool> ridingOut { false };
 };
 } // namespace bm::dsp

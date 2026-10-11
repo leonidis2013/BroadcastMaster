@@ -492,7 +492,7 @@ public:
                 live = [&p]
                 {
                     const float sp = p.levelerSpeech();
-                    return "Gain applied: " + signedText (p.levelerGainDb()) + " dB\nContent: " + juce::String (juce::roundToInt (sp * 100.0f)) + "% speech-like";
+                    return "Gain applied: " + signedText (p.levelerGainDb()) + " dB   (" + (p.levelerRiding() ? "riding" : "holding") + ")\nInput level: " + juce::String (p.levelerLevelLufs(), 1) + " LUFS\nContent: " + juce::String (juce::roundToInt (sp * 100.0f)) + "% speech-like";
                 };
             if (s == sLim)
                 live = [&p]

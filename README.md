@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.4.1** (preset save pop-up with overwrite, export and import; auto-leveler and CPU improvements from 0.4.0)
+**Version 0.4.2** (auto-leveler no longer over-lifts quiet passages or blasts when the music returns; leveler panel shows input level and riding/holding)
 
 ## The signal chain
 

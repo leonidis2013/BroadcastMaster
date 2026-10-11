@@ -337,6 +337,25 @@ static void testLeveler()
         CHECK (lv.gainDb() < gTalk - 6.0f, "gain comes down for loud music %g -> %g", gTalk, lv.gainDb());
         near (lv.levelLufs() + lv.gainDb(), -20.0, 3.0, "loud music lands near target within 6 s");
     }
+    // a quiet passage then the loud music returns: the gain raised for the quiet part must come off within half a second,
+    // and the lift during the dip must stay modest (dip allowance) instead of running to the full range
+    {
+        AutoLeveler lv; lv.prepare (FS);
+        LevParams p; p.targetLufs = -14.0f; p.rangeDb = 24.0f; p.mode = LevMode::Auto; p.speed = LevSpeed::Medium;
+        lv.setParams (p);
+        auto run = [&] (double sec, double db, unsigned seed)
+        {
+            Buf l = shapedNoise ((int) (FS * sec), false, seed, db), r = l;
+            runChunks (l, r, 480, [&] (float* a, float* b, int n) { lv.process (a, b, n); });
+        };
+        run (25, -26, 11);
+        const float gLoud = lv.gainDb();
+        run (4, -40, 12);
+        CHECK (lv.gainDb() < gLoud + 9.0f, "dip lift stays modest %g -> %g", gLoud, lv.gainDb());
+        run (0.6, -26, 13);
+        CHECK (lv.gainDb() < gLoud + 3.0f, "gain comes back within 0.6 s of the loud return %g vs %g", lv.gainDb(), gLoud);
+        CHECK (lv.riding(), "riding while the music plays");
+    }
     // speech vs music classification
     {
         AutoLeveler a, b; a.prepare (FS); b.prepare (FS);
