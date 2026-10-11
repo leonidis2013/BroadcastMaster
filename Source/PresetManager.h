@@ -182,6 +182,37 @@ public:
         return true;
     }
 
+    // Writes the current settings to any file (for moving presets between computers).
+    bool exportTo (const juce::File& file) const
+    {
+        juce::XmlElement root ("BroadcastMasterPreset");
+        root.setAttribute ("version", 1);
+        root.setAttribute ("name", file.getFileNameWithoutExtension());
+        for (const auto& id : bm::params::presetParamIds())
+            if (auto* a = apvts.getRawParameterValue (id))
+            {
+                auto* e = root.createNewChildElement ("P");
+                e->setAttribute ("id", juce::String (id));
+                e->setAttribute ("v", (double) a->load());
+            }
+        return root.writeTo (file);
+    }
+
+    // Copies a preset file into the user folder (a free name is chosen if needed) and applies it.
+    bool importFrom (const juce::File& file)
+    {
+        auto xml = juce::XmlDocument::parse (file);
+        if (xml == nullptr || ! xml->hasTagName ("BroadcastMasterPreset")) return false;
+        auto name = juce::File::createLegalFileName (file.getFileNameWithoutExtension().trim());
+        if (name.isEmpty()) name = "Imported preset";
+        if (isFactory (name)) name += " (user)";
+        const auto dir = userFolder();
+        if (! dir.createDirectory().wasOk()) return false;
+        xml->setAttribute ("name", name);
+        if (! xml->writeTo (fileFor (name))) return false;
+        return applyUser (name);
+    }
+
     bool deleteUser (const juce::String& name)
     {
         const auto f = fileFor (name);

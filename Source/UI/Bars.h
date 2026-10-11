@@ -9,6 +9,71 @@
 
 namespace bm::ui
 {
+// Small non-modal pop-up for saving a preset: a name field (pre-filled with a free name, so Save works even if the
+// host does not pass keystrokes through), overwrite of the current saved preset, and file export / import.
+class SavePresetPanel : public juce::Component
+{
+public:
+    std::function<void (const juce::String&)> onSave;
+    std::function<void()> onExport, onImport;
+
+    SavePresetPanel (const juce::String& suggestion, const juce::String& overwriteName)
+    {
+        title.setText ("Save current settings as a preset", juce::dontSendNotification);
+        title.setFont (font (12.0f, true));
+        addAndMakeVisible (title);
+        edit.setText (suggestion, false);
+        edit.setSelectAllWhenFocused (true);
+        edit.setTextToShowWhenEmpty ("Preset name", pal().textDim);
+        edit.onReturnKey = [this] { doSave(); };
+        addAndMakeVisible (edit);
+        save.setButtonText ("Save");
+        save.onClick = [this] { doSave(); };
+        addAndMakeVisible (save);
+        if (overwriteName.isNotEmpty())
+        {
+            overwrite.setButtonText ("Overwrite \"" + overwriteName + "\"");
+            overwrite.onClick = [this, overwriteName] { if (onSave) onSave (overwriteName); };
+            addAndMakeVisible (overwrite);
+        }
+        exportButton.setButtonText ("Export...");
+        exportButton.setTooltip ("Save the current settings to a .bmpreset file you can copy to another computer");
+        exportButton.onClick = [this] { if (onExport) onExport(); };
+        importButton.setButtonText ("Import...");
+        importButton.setTooltip ("Load a .bmpreset file into My presets");
+        importButton.onClick = [this] { if (onImport) onImport(); };
+        addAndMakeVisible (exportButton);
+        addAndMakeVisible (importButton);
+        setSize (320, overwriteName.isNotEmpty() ? 150 : 118);
+    }
+
+    void visibilityChanged() override { if (isShowing()) edit.grabKeyboardFocus(); }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (10);
+        title.setBounds (r.removeFromTop (18));
+        r.removeFromTop (6);
+        auto row = r.removeFromTop (28);
+        save.setBounds (row.removeFromRight (64));
+        row.removeFromRight (6);
+        edit.setBounds (row);
+        r.removeFromTop (6);
+        if (overwrite.isVisible()) { overwrite.setBounds (r.removeFromTop (28)); r.removeFromTop (6); }
+        auto row2 = r.removeFromTop (28);
+        exportButton.setBounds (row2.removeFromLeft (row2.getWidth() / 2 - 3));
+        row2.removeFromLeft (6);
+        importButton.setBounds (row2);
+    }
+
+private:
+    void doSave() { if (onSave) onSave (edit.getText()); }
+
+    juce::Label title;
+    juce::TextEditor edit;
+    juce::TextButton save, overwrite, exportButton, importButton;
+};
+
 // Presets, bypass A/B and latency mode.
 class TopBar : public juce::Component
 {
@@ -20,7 +85,7 @@ public:
         presetBox.onChange = [this] { choosePreset(); };
         addAndMakeVisible (presetBox);
 
-        saveButton.setTooltip ("Save the current settings as a preset");
+        saveButton.setTooltip ("Save the current settings as a preset (also overwrite, export and import)");
         saveButton.onClick = [this] { askSave(); };
         deleteButton.setTooltip ("Delete the selected saved preset");
         deleteButton.onClick = [this] { askDelete(); };
@@ -114,20 +179,72 @@ private:
         deleteButton.setEnabled (userNames.contains (shownName));
     }
 
+    juce::String freeName() const
+    {
+        for (int i = 1; i < 1000; ++i)
+        {
+            const auto n = "My Preset " + juce::String (i);
+            if (! userNames.contains (n)) return n;
+        }
+        return "My Preset";
+    }
+
     void askSave()
     {
-        auto* w = new juce::AlertWindow ("Save preset", "Name for this preset:", juce::MessageBoxIconType::NoIcon);
         const auto cur = presets.currentName();
-        w->addTextEditor ("name", userNames.contains (cur) ? cur : juce::String(), "");
-        w->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
-        w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        const bool onUser = userNames.contains (cur);
+        auto panel = std::make_unique<SavePresetPanel> (onUser ? cur : freeName(), onUser ? cur : juce::String());
         juce::Component::SafePointer<TopBar> safe (this);
-        w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w] (int result)
+        juce::Component::SafePointer<SavePresetPanel> sp (panel.get());
+        panel->onSave = [safe, sp] (const juce::String& name)
         {
-            if (result != 1 || safe == nullptr) return;
-            const auto name = w->getTextEditorContents ("name");
+            if (safe == nullptr) return;
             if (safe->presets.saveUser (name)) safe->refresh();
-        }), true);
+            if (sp != nullptr)
+                if (auto* box = sp->findParentComponentOfClass<juce::CallOutBox>()) box->dismiss();
+        };
+        panel->onExport = [safe, sp]
+        {
+            if (safe == nullptr) return;
+            if (sp != nullptr)
+                if (auto* box = sp->findParentComponentOfClass<juce::CallOutBox>()) box->dismiss();
+            safe->exportPreset();
+        };
+        panel->onImport = [safe, sp]
+        {
+            if (safe == nullptr) return;
+            if (sp != nullptr)
+                if (auto* box = sp->findParentComponentOfClass<juce::CallOutBox>()) box->dismiss();
+            safe->importPreset();
+        };
+        juce::CallOutBox::launchAsynchronously (std::move (panel), saveButton.getScreenBounds(), nullptr);
+    }
+
+    void exportPreset()
+    {
+        const auto base = presets.currentName().isEmpty() ? juce::String ("BroadcastMaster preset") : presets.currentName();
+        chooser = std::make_unique<juce::FileChooser> ("Export preset", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                                                             .getChildFile (juce::File::createLegalFileName (base) + ".bmpreset"), "*.bmpreset");
+        juce::Component::SafePointer<TopBar> safe (this);
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                                  | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [safe] (const juce::FileChooser& fc)
+                              {
+                                  if (safe == nullptr || fc.getResult() == juce::File()) return;
+                                  safe->presets.exportTo (fc.getResult().withFileExtension ("bmpreset"));
+                              });
+    }
+
+    void importPreset()
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Import preset", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.bmpreset");
+        juce::Component::SafePointer<TopBar> safe (this);
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [safe] (const juce::FileChooser& fc)
+                              {
+                                  if (safe == nullptr || fc.getResult() == juce::File()) return;
+                                  if (safe->presets.importFrom (fc.getResult())) safe->refresh();
+                              });
     }
 
     void askDelete()
@@ -154,6 +271,7 @@ private:
     BroadcastMasterProcessor& proc;
     bm::PresetManager& presets;
     juce::ComboBox presetBox, latencyBox;
+    std::unique_ptr<juce::FileChooser> chooser;
     juce::TextButton saveButton { "Save" }, deleteButton { "Delete" }, bypassButton { "BYPASS" };
     juce::ToggleButton matchToggle { "Loudness-matched" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttach, matchAttach;
