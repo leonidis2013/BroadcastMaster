@@ -6,7 +6,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
 # Apple universal binary (Apple silicon + Intel) by default; Windows builds are x64.
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 
-project(BroadcastMaster VERSION 0.4.2 LANGUAGES C CXX)
+project(BroadcastMaster VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,7 +20,7 @@ else()
     include(FetchContent)
     FetchContent_Declare(JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG 8.0.8
+        GIT_TAG 9.0.3
         GIT_SHALLOW ON)
     FetchContent_MakeAvailable(JUCE)
 endif()

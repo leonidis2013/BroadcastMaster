@@ -10,6 +10,9 @@ class BMLookAndFeel : public juce::LookAndFeel_V4
 public:
     BMLookAndFeel() { applyPalette(); }
 
+    // JUCE 9 sizes widget text with "portable" metrics by default; keep the metrics the layouts were tuned with.
+    juce::TypefaceMetricsKind getDefaultMetricsKind() const override { return juce::TypefaceMetricsKind::legacy; }
+
     void applyPalette()
     {
         const auto& p = pal();

@@ -252,20 +252,18 @@ private:
         const auto name = presets.currentName();
         if (! userNames.contains (name)) return;
         juce::Component::SafePointer<TopBar> safe (this);
-        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
-                                          .withIconType (juce::MessageBoxIconType::QuestionIcon)
-                                          .withTitle ("Delete preset")
-                                          .withMessage ("Delete the saved preset \"" + name + "\"?")
-                                          .withButton ("Delete").withButton ("Cancel"),
-                                      [safe, name] (int result)
-                                      {
-                                          if (result != 1 || safe == nullptr) return;
-                                          if (safe->presets.deleteUser (name))
-                                          {
-                                              safe->presets.setCurrentName ({});
-                                              safe->refresh();
-                                          }
-                                      });
+        // OK/Cancel box: the callback gets 1 for "Delete" and 0 for "Cancel" in every JUCE version
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Delete preset",
+                                            "Delete the saved preset \"" + name + "\"?", "Delete", "Cancel", nullptr,
+                                            juce::ModalCallbackFunction::create ([safe, name] (int result)
+                                            {
+                                                if (result != 1 || safe == nullptr) return;
+                                                if (safe->presets.deleteUser (name))
+                                                {
+                                                    safe->presets.setCurrentName ({});
+                                                    safe->refresh();
+                                                }
+                                            }));
     }
 
     BroadcastMasterProcessor& proc;

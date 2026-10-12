@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.4.2** (auto-leveler no longer over-lifts quiet passages or blasts when the music returns; leveler panel shows input level and riding/holding)
+**Version 0.5.0** (built with JUCE 9.0.3; preset save pop-up, smarter auto-leveler, lower CPU)
 
 ## The signal chain
 
@@ -117,7 +117,7 @@ GitHub Actions builds Windows and macOS (universal arm64 + x86_64) VST3 files on
 build is published on the [Releases page](https://github.com/leonidis2013/BroadcastMaster/releases/latest) (see
 Installing above for the macOS `xattr` step).
 
-Local build (CMake 3.22 or newer; JUCE 8.0.8 is downloaded automatically):
+Local build (CMake 3.22 or newer; JUCE 9.0.3 is downloaded automatically):
 
 ```
 cmake -B build -DCMAKE_BUILD_TYPE=Release
