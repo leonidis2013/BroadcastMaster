@@ -13,7 +13,7 @@ struct LevParams
 {
     float targetLufs = -14.0f;
     float rangeDb = 9.0f;        // the leveler never adds or removes more than this
-    float gateLufs = -50.0f;     // below this the gain is frozen (so it never pumps up room noise)
+    float gateLufs = -45.0f;     // below this the gain is frozen (so it never pumps up room noise)
     LevSpeed speed = LevSpeed::Medium;
     LevMode mode = LevMode::Auto;
 };
@@ -98,13 +98,13 @@ private:
         // Activity: a frame counts as programme only if it is above the gate and not far below the running
         // programme level. Pauses and syllable gaps are therefore left out of the loudness measurement and the
         // gain is frozen across them. After a long quiet spell the relative gate is dropped so a much softer
-        // speaker can still be picked up (but never room noise, which sits far below the old level).
+        // speaker can still be picked up (but never room noise, which sits 20 dB or more below the old level).
         bool active = smoothDb > params.gateLufs;
         if (active && activeValid)
         {
             const float actDb = toDb (activeE);
             if (smoothDb < actDb - 15.0f)
-                active = quietFrames > 150 && smoothDb > actDb - 30.0f;
+                active = quietFrames > 150 && smoothDb > actDb - 20.0f;
         }
 
         if (active)

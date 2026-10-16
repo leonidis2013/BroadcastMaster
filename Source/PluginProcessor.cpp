@@ -217,6 +217,7 @@ void BroadcastMasterProcessor::prepareToPlay (double sampleRate, int)
     metersOut.prepare (sampleRate);
 
     chain.prepare (sampleRate);
+    refreshProgramList();
 
     // First kernels are designed here so the very first block is already right.
     {
@@ -250,6 +251,17 @@ void BroadcastMasterProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             chain.eq.applyKernels (sharedKernels);
             kernelsReady.store (false);
         }
+    }
+
+    if (resetRequested.exchange (false))
+    {
+        chain.reset();
+        metersIn.requestReset(); metersOut.requestReset();
+    }
+    if (panicRequested.exchange (false))
+    {
+        chain.panic();
+        metersIn.requestReset(); metersOut.requestReset();
     }
 
     readParams (cp);
@@ -296,6 +308,8 @@ void BroadcastMasterProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
 void BroadcastMasterProcessor::parameterChanged (const juce::String&, float)
 {
+    // Loading a saved project restores its own leveler target and limiter ceiling; the link only follows later changes.
+    if ((int) (linkMutedUntil.load() - juce::Time::getMillisecondCounter()) > 0) return;
     targetLinkDirty.store (true);
     triggerAsyncUpdate();
 }
@@ -307,6 +321,58 @@ void BroadcastMasterProcessor::handleAsyncUpdate()
 
     if (targetLinkDirty.exchange (false))
         applyTargetLink();
+
+    const int program = pendingProgram.exchange (-1);
+    if (program >= 0)
+    {
+        const int nFactory = (int) bm::factoryPresets().size();
+        if (program < nFactory) hostPresets.applyFactory (program);
+        else
+        {
+            juce::String name;
+            { const juce::ScopedLock sl (programLock); if (program - nFactory < programUserNames.size()) name = programUserNames[program - nFactory]; }
+            if (name.isNotEmpty()) hostPresets.applyUser (name);
+        }
+    }
+}
+
+void BroadcastMasterProcessor::refreshProgramList()
+{
+    const auto names = hostPresets.userPresetNames();
+    const juce::ScopedLock sl (programLock);
+    programUserNames = names;
+}
+
+int BroadcastMasterProcessor::getNumPrograms()
+{
+    const juce::ScopedLock sl (programLock);
+    return (int) bm::factoryPresets().size() + programUserNames.size();
+}
+
+int BroadcastMasterProcessor::getCurrentProgram()
+{
+    const auto cur = hostPresets.currentName();
+    const auto& f = bm::factoryPresets();
+    for (size_t i = 0; i < f.size(); ++i) if (cur == f[i].name) return (int) i;
+    const juce::ScopedLock sl (programLock);
+    const int u = programUserNames.indexOf (cur);
+    return u >= 0 ? (int) f.size() + u : 0;
+}
+
+void BroadcastMasterProcessor::setCurrentProgram (int index)
+{
+    pendingProgram.store (index);   // applied on the message thread
+    triggerAsyncUpdate();
+}
+
+const juce::String BroadcastMasterProcessor::getProgramName (int index)
+{
+    const auto& f = bm::factoryPresets();
+    if (index < 0) return {};
+    if (index < (int) f.size()) return f[(size_t) index].name;
+    const juce::ScopedLock sl (programLock);
+    const int u = index - (int) f.size();
+    return u < programUserNames.size() ? programUserNames[u] : juce::String();
 }
 
 // When the link is on, the loudness target drives the leveler target and the limiter ceiling.
@@ -343,7 +409,10 @@ void BroadcastMasterProcessor::setStateInformation (const void* data, int sizeIn
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
+        {
+            linkMutedUntil.store (juce::Time::getMillisecondCounter() + 1500); // also covers late parameter callbacks
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

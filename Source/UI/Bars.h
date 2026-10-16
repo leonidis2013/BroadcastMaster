@@ -92,6 +92,10 @@ public:
         addAndMakeVisible (saveButton);
         addAndMakeVisible (deleteButton);
 
+        panicButton.setTooltip ("Panic: clear the leveler gain and the limiter at once, and restart the meters. Use it if something sounds wrong mid-service.");
+        panicButton.onClick = [this] { proc.requestPanic(); };
+        addAndMakeVisible (panicButton);
+
         bypassButton.setClickingTogglesState (true);
         bypassButton.setTooltip ("Compare with the untouched input (key: B). The bypassed signal is delayed to line up with the processed one.");
         bypassAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, bm::params::bypass, bypassButton);
@@ -153,17 +157,19 @@ public:
     void resized() override
     {
         auto r = getLocalBounds();
-        presetBox.setBounds (r.removeFromLeft (230).withSizeKeepingCentre (230, 28));
+        presetBox.setBounds (r.removeFromLeft (210).withSizeKeepingCentre (210, 28));
         r.removeFromLeft (6);
         saveButton.setBounds (r.removeFromLeft (58).withSizeKeepingCentre (58, 28));
         r.removeFromLeft (4);
         deleteButton.setBounds (r.removeFromLeft (62).withSizeKeepingCentre (62, 28));
-        r.removeFromLeft (22);
+        r.removeFromLeft (4);
+        panicButton.setBounds (r.removeFromLeft (62).withSizeKeepingCentre (62, 28));
+        r.removeFromLeft (18);
         bypassButton.setBounds (r.removeFromLeft (92).withSizeKeepingCentre (92, 28));
         r.removeFromLeft (8);
         matchToggle.setBounds (r.removeFromLeft (150).withSizeKeepingCentre (150, 28));
         r.removeFromLeft (14);
-        latencyBox.setBounds (r.removeFromLeft (300).withSizeKeepingCentre (300, 28));
+        latencyBox.setBounds (r.removeFromLeft (270).withSizeKeepingCentre (270, 28));
         r.removeFromLeft (10);
         infoArea = r;
     }
@@ -199,7 +205,7 @@ private:
         panel->onSave = [safe, sp] (const juce::String& name)
         {
             if (safe == nullptr) return;
-            if (safe->presets.saveUser (name)) safe->refresh();
+            if (safe->presets.saveUser (name)) { safe->proc.refreshProgramList(); safe->refresh(); }
             if (sp != nullptr)
                 if (auto* box = sp->findParentComponentOfClass<juce::CallOutBox>()) box->dismiss();
         };
@@ -243,7 +249,7 @@ private:
                               [safe] (const juce::FileChooser& fc)
                               {
                                   if (safe == nullptr || fc.getResult() == juce::File()) return;
-                                  if (safe->presets.importFrom (fc.getResult())) safe->refresh();
+                                  if (safe->presets.importFrom (fc.getResult())) { safe->proc.refreshProgramList(); safe->refresh(); }
                               });
     }
 
@@ -261,6 +267,7 @@ private:
                                                 if (safe->presets.deleteUser (name))
                                                 {
                                                     safe->presets.setCurrentName ({});
+                                                    safe->proc.refreshProgramList();
                                                     safe->refresh();
                                                 }
                                             }));
@@ -270,7 +277,7 @@ private:
     bm::PresetManager& presets;
     juce::ComboBox presetBox, latencyBox;
     std::unique_ptr<juce::FileChooser> chooser;
-    juce::TextButton saveButton { "Save" }, deleteButton { "Delete" }, bypassButton { "BYPASS" };
+    juce::TextButton saveButton { "Save" }, deleteButton { "Delete" }, panicButton { "Panic" }, bypassButton { "BYPASS" };
     juce::ToggleButton matchToggle { "Loudness-matched" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttach, matchAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> latencyAttach;

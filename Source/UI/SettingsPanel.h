@@ -5,6 +5,7 @@
 #include "Theme.h"
 #include "../PluginProcessor.h"
 #include "../PresetManager.h"
+#include "Report.h"
 
 namespace bm::ui
 {
@@ -33,13 +34,17 @@ public:
         folderButton.setTooltip ("Open the folder where your saved presets live");
         addAndMakeVisible (folderButton);
 
+        reportButton.onClick = [this] { saveLoudnessReport (proc); };
+        reportButton.setTooltip ("Save integrated loudness, loudness range, peaks and a pass/fail against the chosen destination as a CSV file (since the last Reset)");
+        addAndMakeVisible (reportButton);
+
         const int lat = p.reportedLatency();
         const double ms = lat * 1000.0 / juce::jmax (1.0, p.getCurrentSampleRate());
         latencyText = juce::String (lat) + " samples  (" + juce::String (ms, 1) + " ms)";
         soloText = p.isSoloBusConnected() ? "connected" : "not connected";
         versionText = juce::String (JucePlugin_Name) + " " + JucePlugin_VersionString;
 
-        setSize (400, 36 + rows * 36 + 110);
+        setSize (400, 36 + rows * 36 + 146);
     }
 
     void paint (juce::Graphics& g) override
@@ -65,6 +70,10 @@ public:
         g.setFont (monoFont (12.0f));
         g.drawText (latencyText, 184, y, 202, 24, juce::Justification::centredLeft);
         g.drawText (soloText, 184, y + 24, 202, 24, juce::Justification::centredLeft);
+        g.setFont (font (12.0f));
+        g.setColour (p.text);
+        g.drawText ("Loudness report", 14, 36 + rows * 36 + 84, 160, 26, juce::Justification::centredLeft);
+        g.setColour (p.textDim);
         g.setFont (font (11.0f));
         g.drawText (versionText, 14, getHeight() - 26, getWidth() - 28, 20, juce::Justification::centredLeft);
     }
@@ -78,6 +87,7 @@ public:
             y += 36;
         }
         folderButton.setBounds (184, 36 + rows * 36 + 52, 202, 26);
+        reportButton.setBounds (184, 36 + rows * 36 + 84, 202, 26);
     }
 
 private:
@@ -111,7 +121,7 @@ private:
     juce::ComboBox rtaWeightBox, rtaTargetBox, rtaResBox, themeBox;
     juce::Slider targetSlider, ceilingSlider;
     juce::ToggleButton linkToggle { "Leveler target + limiter ceiling" };
-    juce::TextButton folderButton { "Open presets folder" };
+    juce::TextButton folderButton { "Open presets folder" }, reportButton { "Save loudness report..." };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> rtaWeightAttach, rtaTargetAttach, rtaResAttach, themeAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> targetAttach, ceilingAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> linkAttach;

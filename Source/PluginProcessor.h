@@ -7,6 +7,7 @@
 #include "Dsp/Chain.h"
 #include "Meters/MeterBank.h"
 #include "Parameters.h"
+#include "PresetManager.h"
 
 class BroadcastMasterProcessor : public juce::AudioProcessor,
                                  private juce::AsyncUpdater,
@@ -30,11 +31,16 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    // The host's preset list: the factory presets, then the user's saved presets.
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram (int) override;
+    const juce::String getProgramName (int) override;
     void changeProgramName (int, const juce::String&) override {}
+    void refreshProgramList();   // call after a preset is saved, deleted or imported
+
+    void reset() override { resetRequested.store (true); }   // host transport restart: clear filters and meters
+    void requestPanic() noexcept { panicRequested.store (true); } // clears the leveler gain and the limiter at once
 
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
@@ -101,6 +107,13 @@ private:
     std::atomic<int> latencyShared { 0 };
     int lastLatency = -1;
     std::atomic<bool> targetLinkDirty { false };
+    std::atomic<bool> resetRequested { false }, panicRequested { false };
+    std::atomic<juce::uint32> linkMutedUntil { 0 };
+    std::atomic<int> pendingProgram { -1 };
+
+    juce::CriticalSection programLock;
+    juce::StringArray programUserNames;
+    bm::PresetManager hostPresets { apvts };
 
     // EQ kernels are designed on a background thread and handed over here.
     std::unique_ptr<EqDesigner> designer;

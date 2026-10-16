@@ -188,7 +188,7 @@ inline const std::vector<ParamSpec>& moduleSpecs()
         flt ("lv_target", "Target", "LUFS", sLev, -30.0f, -6.0f, -14.0f, 0.1f, 0.0f, "", false, false);
         flt ("lv_range", "Range (max +/-)", "dB", sLev, 0.0f, 18.0f, 9.0f, 0.1f);
         choice ("lv_speed", "Speed", sLev, { "Slow", "Medium", "Fast" }, 1);
-        flt ("lv_gate", "Gate (freeze below)", "LUFS", sLev, -70.0f, -30.0f, -50.0f, 0.5f);
+        flt ("lv_gate", "Gate (freeze below)", "LUFS", sLev, -70.0f, -30.0f, -45.0f, 0.5f);
         choice ("lv_mode", "Content", sLev, { "Auto", "Speech", "Music" }, 0);
 
         // 8 stereo utilities (the lip-sync delay belongs to the set-up, not to a sound preset)

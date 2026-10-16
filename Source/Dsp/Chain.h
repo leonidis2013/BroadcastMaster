@@ -76,7 +76,7 @@ public:
     void reset()
     {
         hpf.reset(); phase.reset(); eq.reset(); sat.reset(); enh.reset(); mbc.reset(); lev.reset();
-        stereo.prepare (fs); clip.reset(); lim.reset();
+        stereo.resetState(); clip.reset(); lim.reset();
         wetTrack.reset(); dryTrack.reset();
         for (auto& d : dryRing) std::fill (d.begin(), d.end(), 0.0f);
         dryWp = 0;
@@ -92,15 +92,43 @@ public:
     void applyMode (bool b) { if (b != broadcast) setMode (b); }
     double sampleRate() const noexcept { return fs; }
 
+    // Panic: clears the leveler gain and the limiter, back to a clean start (latency does not change).
+    void panic() noexcept { lev.reset(); lim.reset(); }
+
+    // True for NaN and infinity. Tested on the bit pattern, so it keeps working under fast-math compiler options.
+    static bool isBad (float x) noexcept
+    {
+        std::uint32_t b; std::memcpy (&b, &x, sizeof b);
+        return (b & 0x7f800000u) == 0x7f800000u;
+    }
+
     // Processes n samples in place. auxL/auxR (optional) receive the solo bus (silence when solo is off).
     // Without an aux bus and with soloToMain set, the solo signal replaces the main output.
     void process (const ChainParams& p, float* l, float* r, int n, float* auxL, float* auxR, bool soloToMain,
                   bm::MeterBank* mIn, bm::MeterBank* mOut) noexcept
     {
+        // One NaN or infinite sample from upstream would otherwise stay in the filters for good: replace them with silence.
+        for (int i = 0; i < n; ++i)
+        {
+            if (isBad (l[i])) l[i] = 0.0f;
+            if (isBad (r[i])) r[i] = 0.0f;
+        }
+
         for (int off = 0; off < n; off += kMaxChunk)
         {
             const int k = std::min (kMaxChunk, n - off);
             processChunk (p, l + off, r + off, k, auxL ? auxL + off : nullptr, auxR ? auxR + off : nullptr, soloToMain, mIn, mOut);
+        }
+
+        // Safety net: if anything non-finite still came out, mute this block and start the chain clean.
+        bool bad = false;
+        for (int i = 0; i < n && ! bad; ++i) bad = isBad (l[i]) || isBad (r[i]);
+        if (bad)
+        {
+            std::fill (l, l + n, 0.0f); std::fill (r, r + n, 0.0f);
+            if (auxL) std::fill (auxL, auxL + n, 0.0f);
+            if (auxR) std::fill (auxR, auxR + n, 0.0f);
+            reset();
         }
     }
 

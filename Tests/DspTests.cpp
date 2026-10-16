@@ -356,6 +356,22 @@ static void testLeveler()
         CHECK (lv.gainDb() < gLoud + 3.0f, "gain comes back within 0.6 s of the loud return %g vs %g", lv.gainDb(), gLoud);
         CHECK (lv.riding(), "riding while the music plays");
     }
+    // room noise during a long pause must not be lifted (noise 28 dB below the speech, gate at -45 LUFS)
+    {
+        AutoLeveler lv; lv.prepare (FS);
+        LevParams p; p.targetLufs = -16.0f; p.rangeDb = 10.0f; p.gateLufs = -45.0f; p.mode = LevMode::Auto; p.speed = LevSpeed::Medium;
+        lv.setParams (p);
+        auto talk = [&] (double sec, double db, unsigned seed)
+        {
+            Buf l = shapedNoise ((int) (FS * sec), true, seed, db), r = l;
+            runChunks (l, r, 480, [&] (float* a, float* b, int n) { lv.process (a, b, n); });
+        };
+        talk (20, -17, 31);
+        const float g0 = lv.gainDb();
+        Buf hl = shapedNoise ((int) (FS * 20), false, 32, -45), hr = hl;   // steady hiss about 28 dB under the speech
+        runChunks (hl, hr, 480, [&] (float* a, float* b, int n) { lv.process (a, b, n); });
+        CHECK (lv.gainDb() < g0 + 1.0f, "hiss in a long pause is not lifted %g -> %g", g0, lv.gainDb());
+    }
     // speech vs music classification
     {
         AutoLeveler a, b; a.prepare (FS); b.prepare (FS);

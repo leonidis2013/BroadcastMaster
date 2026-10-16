@@ -291,9 +291,35 @@ static void testModeSwitch()
     }
 }
 
+static void testBadInput()
+{
+    // a NaN and an infinity from upstream must not leave the chain broken
+    Chain c; c.prepare (FS);
+    ChainParams p; for (bool& b : p.on) b = true;
+    Buf l = noise (48000, 0.2f, 21), r = noise (48000, 0.2f, 22);
+    l[24100] = std::nanf (""); r[24200] = INFINITY; l[24300] = -INFINITY;
+    auto res0 = run (c, p, l, r, 480);
+    bool allFinite = true;
+    for (size_t i = 0; i < l.size(); ++i) allFinite = allFinite && std::isfinite (res0.l[i]) && std::isfinite (res0.r[i]);
+    CHECK (allFinite, "output stays finite after NaN / infinity input");
+    // and it keeps producing audio afterwards
+    Buf l2 = noise (48000, 0.2f, 23), r2 = noise (48000, 0.2f, 24);
+    auto res = run (c, p, l2, r2, 480);
+    double e = 0; for (size_t i = 24000; i < res.l.size(); ++i) e += (double) res.l[i] * res.l[i];
+    CHECK (e > 1.0, "audio continues after bad input (energy %g)", e);
+
+    // panic keeps the latency and the audio flowing
+    const int lat = c.latency();
+    c.panic();
+    CHECK (c.latency() == lat, "panic does not change latency");
+    auto res2 = run (c, p, l2, r2, 480);
+    double e2 = 0; for (size_t i = 24000; i < res2.l.size(); ++i) e2 += (double) res2.l[i] * res2.l[i];
+    CHECK (e2 > 1.0, "audio continues after panic");
+}
+
 int main()
 {
-    testLatency(); testBlockIndependence(); testBypass(); testSolo(); testEnableClick(); testAllOn(); testModeSwitch();
+    testLatency(); testBlockIndependence(); testBypass(); testSolo(); testEnableClick(); testAllOn(); testModeSwitch(); testBadInput();
     std::printf ("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

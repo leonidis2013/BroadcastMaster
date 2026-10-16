@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.5.0** (built with JUCE 9.0.3; preset save pop-up, smarter auto-leveler, lower CPU)
+**Version 0.6.0** (robust against bad input, no noise lift in long pauses, host preset list, Panic button, loudness report CSV)
 
 ## The signal chain
 
@@ -46,8 +46,14 @@ Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mon
   to move a `.bmpreset` file between computers. Saved presets are small `.bmpreset` files in your user data folder
   (Settings has an "Open presets folder" button). A preset covers the stage gains, switches and module settings.
   It does not touch the loudness target, limiter ceiling, leveler target, lip-sync delay or any global switch.
+- **Host presets:** the factory presets and your saved presets also appear in the host's own preset list, so a host that
+  can switch plug-in presets (for example from a button or MIDI) can switch BroadcastMaster presets.
+- **Panic:** the **Panic** button in the top bar clears the leveler gain and the limiter at once and restarts the meters.
+  The plug-in also clears its state when the host stops and restarts, and silences any NaN or infinite input from upstream.
+- **Loudness report:** Settings has **Save loudness report...**, a CSV with integrated loudness, loudness range, peaks and a
+  pass/fail against the chosen destination, measured at the output since the last Reset.
 - **Loudness target link:** choosing a destination also sets the leveler target and the limiter ceiling
-  (can be switched off in Settings).
+  (can be switched off in Settings). It follows changes to the target only; opening a saved project keeps the leveler target and limiter ceiling you saved.
 - **Bypass with loudness matching:** the bypassed signal is time-aligned with the processed one and brought to the
   same loudness (about a one-second average), so a louder result does not just sound better. Key `B`.
 - **Latency mode:**

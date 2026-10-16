@@ -106,6 +106,13 @@ public:
         lastExHz = -1.0f;
     }
 
+    // Clears the audio held in the delay line and the exciter filters, without touching the settings or allocating.
+    void resetState() noexcept
+    {
+        for (auto& d : delayBuf) std::fill (d.begin(), d.end(), 0.0f);
+        exHp1.reset(); exHp2.reset(); exXp = 0.0f;
+    }
+
     void setParams (const Params& p)
     {
         params = p;
