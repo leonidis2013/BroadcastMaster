@@ -37,6 +37,8 @@ public:
     void setCurrentProgram (int) override;
     const juce::String getProgramName (int) override;
     void changeProgramName (int, const juce::String&) override {}
+    bool exportSettings (const juce::File& file);   // every setting of the plugin, to a .bmsettings file
+    bool importSettings (const juce::File& file);
     void refreshProgramList();   // call after a preset is saved, deleted or imported
 
     void reset() override { resetRequested.store (true); }   // host transport restart: clear filters and meters

@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.6.1** (window now scales as a unit with a fixed aspect ratio so graphics no longer distort; Contemporary church preset also tuned for speaking)
+**Version 0.7.0** (export and import of all plugin settings from the Settings box; Contemporary church preset made warmer and less compressed)
 
 ## The signal chain
 
@@ -50,6 +50,7 @@ Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mon
   can switch plug-in presets (for example from a button or MIDI) can switch BroadcastMaster presets.
 - **Panic:** the **Panic** button in the top bar clears the leveler gain and the limiter at once and restarts the meters.
   The plug-in also clears its state when the host stops and restarts, and silences any NaN or infinite input from upstream.
+- **Export / import all settings:** Settings has **Export...** and **Import...** for the whole plugin state (every stage, loudness target, ceiling, delay and view options) as a `.bmsettings` file, for backups or moving to another computer. Presets (Save > Export/Import) still cover only the stage settings.
 - **Loudness report:** Settings has **Save loudness report...**, a CSV with integrated loudness, loudness range, peaks and a
   pass/fail against the chosen destination, measured at the output since the last Reset.
 - **Loudness target link:** choosing a destination also sets the leveler target and the limiter ceiling

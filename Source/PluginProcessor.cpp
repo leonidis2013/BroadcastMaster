@@ -415,6 +415,24 @@ void BroadcastMasterProcessor::setStateInformation (const void* data, int sizeIn
         }
 }
 
+// Whole-plugin settings (every parameter, including loudness target, ceiling, lip-sync delay and view options).
+bool BroadcastMasterProcessor::exportSettings (const juce::File& file)
+{
+    if (auto xml = apvts.copyState().createXml())
+        return xml->writeTo (file);
+    return false;
+}
+
+bool BroadcastMasterProcessor::importSettings (const juce::File& file)
+{
+    auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr || ! xml->hasTagName (apvts.state.getType())) return false;
+    linkMutedUntil.store (juce::Time::getMillisecondCounter() + 1500);
+    apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    refreshProgramList();
+    return true;
+}
+
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new BroadcastMasterProcessor();
