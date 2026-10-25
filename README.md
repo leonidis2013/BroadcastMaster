@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.6.0** (robust against bad input, no noise lift in long pauses, host preset list, Panic button, loudness report CSV)
+**Version 0.6.1** (window now scales as a unit with a fixed aspect ratio so graphics no longer distort; Contemporary church preset also tuned for speaking)
 
 ## The signal chain
 
@@ -40,7 +40,7 @@ Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mon
 
 ## Master controls
 
-- **Presets:** seven factory presets (Init, Talk / Podcast, Music Show, Mixed Show, Church - Contemporary, Church - Traditional, Gentle Leveler + Safety Limiter)
+- **Presets:** seven factory presets (Init, Talk / Podcast, Music Show, Mixed Show, Church - Contemporary (band, vocals and speaking), Church - Traditional, Gentle Leveler + Safety Limiter)
   and your own: press **Save** next to the preset box, type a name (or keep the suggested one) and press Save again;
   pick a saved preset first to overwrite it, **Delete** removes it, and the Save pop-up also has **Export...** and **Import...**
   to move a `.bmpreset` file between computers. Saved presets are small `.bmpreset` files in your user data folder

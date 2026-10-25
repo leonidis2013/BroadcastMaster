@@ -87,7 +87,7 @@ public:
         drawReadout (g, row.removeFromLeft (row.getWidth() / 2 - 2), "LRA", juce::String (s.lra, 1), "LU", p.text, 18.0f,
                      deltaText (dLra, "LU", 0.0f, 0.0f, true));
         row.removeFromLeft (4);
-        drawReadout (g, row, "TRUE PEAK", dbText (s.tpHold), "dBTP", tpCol, 18.0f,
+        drawReadout (g, row, "TRUE PK", dbText (s.tpHold), "dBTP", tpCol, 18.0f,
                      deltaText (dTp, "dB", state.in.tpHold, state.out.tpHold));
 
         paintTrend (g, r.toFloat());

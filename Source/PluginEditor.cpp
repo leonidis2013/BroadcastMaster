@@ -13,14 +13,14 @@ BroadcastMasterEditor::BroadcastMasterEditor (BroadcastMasterProcessor& p)
     setLookAndFeel (&laf);
     setWantsKeyboardFocus (true);
 
-    addAndMakeVisible (spectrum);
-    addAndMakeVisible (loudness);
-    addAndMakeVisible (stereo);
-    addAndMakeVisible (dynamics);
-    addAndMakeVisible (chain);
-    addAndMakeVisible (topBar);
-    addAndMakeVisible (monBar);
-    addAndMakeVisible (modules);
+    content.addAndMakeVisible (spectrum);
+    content.addAndMakeVisible (loudness);
+    content.addAndMakeVisible (stereo);
+    content.addAndMakeVisible (dynamics);
+    content.addAndMakeVisible (chain);
+    content.addAndMakeVisible (topBar);
+    content.addAndMakeVisible (monBar);
+    content.addAndMakeVisible (modules);
 
     chain.onSelect = [this] (int s) { selectStage (s); };
     selectStage ((int) p.apvts.state.getProperty ("selectedStage", bm::dsp::sEq));
@@ -33,24 +33,30 @@ BroadcastMasterEditor::BroadcastMasterEditor (BroadcastMasterProcessor& p)
     outputButton.setTooltip ("Meter the signal leaving the chain (key: O, Tab flips)");
     inputButton.onClick  = [this] { if (inputButton.getToggleState())  setSource (false); };
     outputButton.onClick = [this] { if (outputButton.getToggleState()) setSource (true); };
-    addAndMakeVisible (inputButton);
-    addAndMakeVisible (outputButton);
+    content.addAndMakeVisible (inputButton);
+    content.addAndMakeVisible (outputButton);
 
     compareButton.setTooltip ("Show the change the chain makes: delta readouts and the other signal's spectrum overlaid");
     compareAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, bm::params::compare, compareButton);
-    addAndMakeVisible (compareButton);
+    content.addAndMakeVisible (compareButton);
 
     themeButton.onClick = [this] { toggleTheme(); };
     settingsButton.onClick = [this] { openSettings(); };
     settingsButton.setTooltip ("Spectrum options, custom loudness target, target link, theme, latency and presets folder");
-    addAndMakeVisible (themeButton);
-    addAndMakeVisible (settingsButton);
+    content.addAndMakeVisible (themeButton);
+    content.addAndMakeVisible (settingsButton);
 
     applyTheme (param (bm::params::theme) < 0.5f);
 
+    // The whole interface is laid out at one design size and scaled as a unit, so resizing the window (or a
+    // high-DPI screen) can never clip or overlap anything. The window keeps the design proportions.
+    addAndMakeVisible (content);
+    content.onPaint = [this] (juce::Graphics& g) { paintContent (g); };
+    content.addMouseListener (this, false);
     setResizable (true, true);
-    setResizeLimits (1100, 860, 1900, 1400);
-    setSize (1240, 1020);
+    setResizeLimits (kDesignW * 3 / 4, kDesignH * 3 / 4, kDesignW * 3 / 2, kDesignH * 3 / 2);
+    getConstrainer()->setFixedAspectRatio ((double) kDesignW / (double) kDesignH);
+    setSize (kDesignW, kDesignH);
 
     startTimerHz (20);
 }
@@ -93,7 +99,7 @@ void BroadcastMasterEditor::setSource (bool output)
 
 void BroadcastMasterEditor::openSettings()
 {
-    juce::CallOutBox::launchAsynchronously (std::make_unique<SettingsPanel> (processor), settingsButton.getBounds(), this);
+    juce::CallOutBox::launchAsynchronously (std::make_unique<SettingsPanel> (processor), settingsButton.getScreenBounds(), nullptr);
 }
 
 void BroadcastMasterEditor::selectStage (int stage)
@@ -172,10 +178,15 @@ void BroadcastMasterEditor::timerCallback()
 
 void BroadcastMasterEditor::paint (juce::Graphics& g)
 {
+    g.fillAll (pal().bg);
+}
+
+void BroadcastMasterEditor::paintContent (juce::Graphics& g)
+{
     const auto& p = pal();
     g.fillAll (p.bg);
 
-    auto header = getLocalBounds().reduced (14, 10).removeFromTop (34);
+    auto header = juce::Rectangle<int> (0, 0, kDesignW, kDesignH).reduced (14, 10).removeFromTop (34);
 
     // "on air" lamp and title
     g.setColour (p.accent);
@@ -190,7 +201,16 @@ void BroadcastMasterEditor::paint (juce::Graphics& g)
 
 void BroadcastMasterEditor::resized()
 {
-    auto r = getLocalBounds().reduced (12);
+    const float s = juce::jmin ((float) getWidth() / (float) kDesignW, (float) getHeight() / (float) kDesignH);
+    content.setBounds (0, 0, kDesignW, kDesignH);
+    content.setTransform (juce::AffineTransform::scale (s).translated (((float) getWidth() - (float) kDesignW * s) * 0.5f,
+                                                                       ((float) getHeight() - (float) kDesignH * s) * 0.5f));
+    layoutContent();
+}
+
+void BroadcastMasterEditor::layoutContent()
+{
+    auto r = juce::Rectangle<int> (0, 0, kDesignW, kDesignH).reduced (12);
     auto header = r.removeFromTop (40);
     r.removeFromTop (6);
 
@@ -220,7 +240,7 @@ void BroadcastMasterEditor::resized()
     auto rightCol = r.removeFromRight (juce::jlimit (380, 480, r.getWidth() * 36 / 100));
     r.removeFromRight (8);
     spectrum.setBounds (r);
-    loudness.setBounds (rightCol.removeFromTop (rightCol.getHeight() * 55 / 100));
+    loudness.setBounds (rightCol.removeFromTop (juce::jmax (272, rightCol.getHeight() * 55 / 100)));
     rightCol.removeFromTop (8);
     stereo.setBounds (rightCol);
 }

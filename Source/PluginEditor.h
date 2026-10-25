@@ -22,11 +22,14 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    static constexpr int kDesignW = 1240, kDesignH = 1100;
     bool keyPressed (const juce::KeyPress&) override;
     void mouseDown (const juce::MouseEvent&) override { grabKeyboardFocus(); }
 
 private:
     void timerCallback() override;
+    void paintContent (juce::Graphics&);
+    void layoutContent();
     void applyTheme (bool dark);
     void setSource (bool output);
     void toggleTheme();
@@ -35,7 +38,15 @@ private:
     void toggleParam (const char* id);
     float param (const char* id) const { return processor.apvts.getRawParameterValue (id)->load(); }
 
+    // Everything is placed in this component at the design size; the editor scales it to fit the window.
+    struct Content : juce::Component
+    {
+        std::function<void (juce::Graphics&)> onPaint;
+        void paint (juce::Graphics& g) override { if (onPaint) onPaint (g); }
+    };
+
     BroadcastMasterProcessor& processor;
+    Content content;
     bm::ui::BMLookAndFeel laf;
 
     bm::ui::SpectrumPanel spectrum;
