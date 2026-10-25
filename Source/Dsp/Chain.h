@@ -17,7 +17,8 @@
 namespace bm::dsp
 {
 inline constexpr int kStageCount = 12;
-enum Stage { sInput = 0, sHpf, sPhase, sEq, sSat, sExc, sMbc, sLev, sStereo, sClip, sLim, sOut };
+// Stage order is the signal order, left to right: clean-up, tone, dynamics, colour, stereo, loudness, then peak control.
+enum Stage { sInput = 0, sHpf, sPhase, sEq, sMbc, sSat, sExc, sStereo, sLev, sClip, sLim, sOut };
 
 // What the solo / monitor bus plays.
 enum class MonSrc { Output = 0, Input, Delta, LimiterDelta, Band1, Band2, Band3, Band4 };
@@ -25,7 +26,7 @@ enum class MonSrc { Output = 0, Input, Delta, LimiterDelta, Band1, Band2, Band3,
 struct ChainParams
 {
     float gainDb[kStageCount] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1.0f, 0 }; // stage output gains; [sLim] is the ceiling
-    bool on[kStageCount] { true, true, false, true, false, false, false, false, true, false, true, true };
+    bool on[kStageCount] { true, true, false, true, false, false, false, true, false, false, true, true };
     bool broadcast = false;                 // false = Live (low latency), true = Broadcast (linear-phase EQ, longer look-ahead)
 
     float hpFreq = 25.0f, phaseFreq = 160.0f;
@@ -314,23 +315,7 @@ private:
             gainStage (p, sEq, p.on[sEq], l, r, n);
         }
 
-        // 4 saturation
-        fade (sSat, p.on[sSat], l, r, n,
-              [&] (float* a, float* b, int k) { sat.setParams (p.satType, p.satAmount, p.satMix); sat.process (a, b, k); },
-              [&] { sat.reset(); });
-        gainStage (p, sSat, p.on[sSat], l, r, n);
-
-        // 5 exciter and bass enhancer
-        fade (sExc, p.on[sExc], l, r, n,
-              [&] (float* a, float* b, int k)
-              {
-                  enh.setParams (p.excFreq, p.excAmount, p.bassFreq, p.bassAmount);
-                  enh.process (a, b, k);
-              },
-              [&] { enh.reset(); });
-        gainStage (p, sExc, p.on[sExc], l, r, n);
-
-        // 6 multiband compressor
+        // 4 multiband compressor
         fade (sMbc, p.on[sMbc], l, r, n,
               [&] (float* a, float* b, int k)
               {
@@ -341,18 +326,34 @@ private:
               [&] { mbc.reset(); });
         gainStage (p, sMbc, p.on[sMbc], l, r, n);
 
-        // 7 auto leveler
-        fade (sLev, p.on[sLev], l, r, n,
-              [&] (float* a, float* b, int k) { lev.setParams (p.lev); lev.process (a, b, k); },
-              [&] { lev.reset(); });
-        gainStage (p, sLev, p.on[sLev], l, r, n);
+        // 5 saturation
+        fade (sSat, p.on[sSat], l, r, n,
+              [&] (float* a, float* b, int k) { sat.setParams (p.satType, p.satAmount, p.satMix); sat.process (a, b, k); },
+              [&] { sat.reset(); });
+        gainStage (p, sSat, p.on[sSat], l, r, n);
 
-        // 8 stereo utilities (neutral when switched off; the lip-sync delay crossfades itself)
+        // 6 exciter and bass enhancer
+        fade (sExc, p.on[sExc], l, r, n,
+              [&] (float* a, float* b, int k)
+              {
+                  enh.setParams (p.excFreq, p.excAmount, p.bassFreq, p.bassAmount);
+                  enh.process (a, b, k);
+              },
+              [&] { enh.reset(); });
+        gainStage (p, sExc, p.on[sExc], l, r, n);
+
+        // 7 stereo utilities (neutral when switched off; the lip-sync delay crossfades itself)
         {
             stereo.setParams (p.on[sStereo] ? p.stereo : StereoUtils::Params {});
             stereo.process (l, r, n);
             gainStage (p, sStereo, p.on[sStereo], l, r, n);
         }
+
+        // 8 auto leveler
+        fade (sLev, p.on[sLev], l, r, n,
+              [&] (float* a, float* b, int k) { lev.setParams (p.lev); lev.process (a, b, k); },
+              [&] { lev.reset(); });
+        gainStage (p, sLev, p.on[sLev], l, r, n);
 
         // 9 soft clipper
         fade (sClip, p.on[sClip], l, r, n,

@@ -4,27 +4,28 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.7.0** (export and import of all plugin settings from the Settings box; Contemporary church preset made warmer and less compressed)
+**Version 0.8.0** (stages reordered into traditional mastering order: EQ, multiband compressor, saturation, exciter, stereo, leveler, clipper, limiter)
 
 ## The signal chain
 
 Every stage has an on/off switch and an output gain (+/-12 dB) with a mini level meter, for gain staging.
 Click a stage to open its settings in the panel below the chain.
+The stages run left to right in the traditional mastering order (clean-up, tone, dynamics, colour, stereo, loudness, then peak control), so switching them on from the left builds on the stages before. The Auto leveler sits just before the clipper and limiter so it sets the final loudness after everything that could change the level.
 
 | # | Stage | What it does |
 |---|-------|--------------|
-| 1 | Input trim | Gain before everything else |
-| 2 | Subsonic HPF | 4th-order high-pass, 10 to 60 Hz |
-| 3 | Phase rotation | 1 to 4 all-pass stages that lower voice peaks without changing the tone |
-| 4 | Tonal EQ | 6 bands (low shelf, 4 bells, high shelf) plus tilt. Each band acts on stereo, mid only or side only. Minimum-phase in Live mode, linear-phase in Broadcast mode. The curve is drawn over the spectrum |
-| 5 | Saturation | Tube, tape or transformer, anti-aliased, with amount and mix |
-| 6 | Exciter / bass | Air exciter above a chosen frequency, and a bass enhancer that adds harmonics of the low end |
-| 7 | Multiband compressor | 4 bands on Linkwitz-Riley crossovers. The graph shows each band's level, gain reduction and threshold; drag the crossovers sideways and the thresholds up and down. The selected band's ratio, attack, release, makeup and solo sit in one row below |
-| 8 | Auto leveler | Slow gain rider toward a target LUFS with range limit, speed, a gate that freezes the gain in silence, and a speech/music detector (Auto, Speech or Music) |
-| 9 | Stereo utilities | Width, mid and side gain, a stereo exciter (harmonics added to the side signal above a chosen frequency), polarity flips, mono sum, lip-sync delay 0 to 500 ms |
-| 10 | Soft clipper | Smooth tanh shoulder with an adjustable linear zone, anti-aliased |
-| 11 | True-peak limiter | Look-ahead limiter working on the 4x oversampled peak. Its "gain" is the ceiling |
-| 12 | Output trim | Cut-only, 0 to -24 dB, after the limiter |
+| 1 || Input trim | Gain before everything else |
+| 2 || Subsonic HPF | 4th-order high-pass, 10 to 60 Hz |
+| 3 || Phase rotation | 1 to 4 all-pass stages that lower voice peaks without changing the tone |
+| 4 || Tonal EQ | 6 bands (low shelf, 4 bells, high shelf) plus tilt. Each band acts on stereo, mid only or side only. Minimum-phase in Live mode, linear-phase in Broadcast mode. The curve is drawn over the spectrum |
+| 5 || Multiband compressor | 4 bands on Linkwitz-Riley crossovers. The graph shows each band's level, gain reduction and threshold; drag the crossovers sideways and the thresholds up and down. The selected band's ratio, attack, release, makeup and solo sit in one row below |
+| 6 || Saturation | Tube, tape or transformer, anti-aliased, with amount and mix |
+| 7 || Exciter / bass | Air exciter above a chosen frequency, and a bass enhancer that adds harmonics of the low end |
+| 8 || Stereo utilities | Width, mid and side gain, a stereo exciter (harmonics added to the side signal above a chosen frequency), polarity flips, mono sum, lip-sync delay 0 to 500 ms |
+| 9 || Auto leveler | Slow gain rider toward a target LUFS with range limit, speed, a gate that freezes the gain in silence, and a speech/music detector (Auto, Speech or Music) |
+| 10 || Soft clipper | Smooth tanh shoulder with an adjustable linear zone, anti-aliased |
+| 11 || True-peak limiter | Look-ahead limiter working on the 4x oversampled peak. Its "gain" is the ceiling |
+| 12 || Output trim | Cut-only, 0 to -24 dB, after the limiter |
 
 Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mono, dither, reference loader.
 
