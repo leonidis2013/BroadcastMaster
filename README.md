@@ -4,7 +4,7 @@ Master-bus broadcast audio suite for streams and live broadcasts: loudness and s
 12-stage processing chain ending in a true-peak limiter, a solo bus for monitoring, and presets.
 Built with JUCE, VST3, Windows and macOS, stereo only.
 
-**Version 0.8.0** (stages reordered into traditional mastering order: EQ, multiband compressor, saturation, exciter, stereo, leveler, clipper, limiter)
+**Version 0.8.1** (YouTube and Twitch / Kick targets now use a -2 dBTP true-peak ceiling, leaving headroom for peaks that grow in the platform's re-encode)
 
 ## The signal chain
 
@@ -55,7 +55,8 @@ Not included on purpose: dynamic EQ, gate, de-esser, noise suppression, bass mon
 - **Loudness report:** Settings has **Save loudness report...**, a CSV with integrated loudness, loudness range, peaks and a
   pass/fail against the chosen destination, measured at the output since the last Reset.
 - **Loudness target link:** choosing a destination also sets the leveler target and the limiter ceiling
-  (can be switched off in Settings). It follows changes to the target only; opening a saved project keeps the leveler target and limiter ceiling you saved.
+  (can be switched off in Settings). YouTube and Twitch / Kick use a -2 dBTP ceiling, the other destinations -1 dBTP
+  (ATSC A/85 -2 dBTP). It follows changes to the target only; opening a saved project keeps the leveler target and limiter ceiling you saved.
 - **Bypass with loudness matching:** the bypassed signal is time-aligned with the processed one and brought to the
   same loudness (about a one-second average), so a louder result does not just sound better. Key `B`.
 - **Latency mode:**

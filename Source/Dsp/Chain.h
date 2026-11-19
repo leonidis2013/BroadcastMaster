@@ -25,7 +25,7 @@ enum class MonSrc { Output = 0, Input, Delta, LimiterDelta, Band1, Band2, Band3,
 
 struct ChainParams
 {
-    float gainDb[kStageCount] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1.0f, 0 }; // stage output gains; [sLim] is the ceiling
+    float gainDb[kStageCount] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2.0f, 0 }; // stage output gains; [sLim] is the ceiling
     bool on[kStageCount] { true, true, false, true, false, false, false, true, false, false, true, true };
     bool broadcast = false;                 // false = Live (low latency), true = Broadcast (linear-phase EQ, longer look-ahead)
 

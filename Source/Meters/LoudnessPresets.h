@@ -16,8 +16,8 @@ struct LoudnessPreset
 
 inline constexpr LoudnessPreset kLoudnessPresets[] =
 {
-    { "YouTube",               -14.0f, 1.0f, -1.0f },
-    { "Twitch / Kick (typical)", -14.0f, 1.0f, -1.0f },
+    { "YouTube",               -14.0f, 1.0f, -2.0f }, // -2: headroom for overshoot in the platform re-encode
+    { "Twitch / Kick (typical)", -14.0f, 1.0f, -2.0f },
     { "Spotify",               -14.0f, 1.0f, -1.0f },
     { "Apple Music / Podcast", -16.0f, 1.0f, -1.0f },
     { "EBU R128",              -23.0f, 0.5f, -1.0f },

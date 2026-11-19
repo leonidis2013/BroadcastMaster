@@ -12,7 +12,7 @@ struct UiState
     bool showOutput = true;   // Input / Output meter switch
     bool compare = false;     // delta readouts and RTA overlay
     int presetIdx = 0;
-    float target = -14.0f, tolerance = 1.0f, ceiling = -1.0f;
+    float target = -14.0f, tolerance = 1.0f, ceiling = -2.0f;
 
     const bm::MeterSnapshot& shown() const noexcept { return showOutput ? out : in; }
 };

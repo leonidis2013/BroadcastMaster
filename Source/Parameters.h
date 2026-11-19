@@ -57,7 +57,7 @@ inline constexpr StageInfo kStages[] =
     { "g_st",   "Stereo Utilities",  "Gain",    -12.0f, 12.0f,  0.0f, false, "en_st",    true  },
     { "g_lev",  "Auto Leveler",      "Gain",    -12.0f, 12.0f,  0.0f, false, "en_lev",   false },
     { "g_clip", "Soft Clipper",      "Gain",    -12.0f, 12.0f,  0.0f, false, "en_clip",  false },
-    { "g_lim",  "True-Peak Limiter", "Ceiling", -12.0f,  0.0f, -1.0f, true,  "en_lim",   true  },
+    { "g_lim",  "True-Peak Limiter", "Ceiling", -12.0f,  0.0f, -2.0f, true,  "en_lim",   true  },
     { "g_out",  "Output Trim",       "Trim",    -24.0f,  0.0f,  0.0f, false, nullptr,    true  },
 };
 
